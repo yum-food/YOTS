@@ -22,6 +22,8 @@ namespace YOTS
         public List<string> meshToggles = new List<string>();
         [SerializeField]
         public List<BlendShapeSpec> blendShapes = new List<BlendShapeSpec>();
+        [SerializeField]
+        public string menuPath = "/";
 
         public ToggleSpec(string name)
         {
@@ -53,10 +55,18 @@ namespace YOTS
         [SerializeField]
         public string blendShape;
 
-        public BlendShapeSpec(string path, string blendShape)
+        [SerializeField]
+        public float offValue = 0.0f;
+
+        [SerializeField]
+        public float onValue = 100.0f;
+
+        public BlendShapeSpec(string path, string blendShape, float offValue = 0, float onValue = 100)
         {
             this.path = path;
             this.blendShape = blendShape;
+            this.offValue = offValue;
+            this.onValue = onValue;
         }
 
         public BlendShapeSpec() {}
@@ -274,7 +284,11 @@ namespace YOTS
                 {
                     foreach (var bs in toggle.blendShapes)
                     {
-                        onAnim.blendShapes.Add(new GeneratedBlendShape { path = bs.path, blendShape = bs.blendShape, value = 100.0f });
+                        onAnim.blendShapes.Add(new GeneratedBlendShape { 
+                            path = bs.path, 
+                            blendShape = bs.blendShape, 
+                            value = bs.onValue
+                        });
                     }
                 }
                 genAnimConfig.animations.Add(onAnim);
@@ -292,7 +306,11 @@ namespace YOTS
                 {
                     foreach (var bs in toggle.blendShapes)
                     {
-                        offAnim.blendShapes.Add(new GeneratedBlendShape { path = bs.path, blendShape = bs.blendShape, value = 0.0f });
+                        offAnim.blendShapes.Add(new GeneratedBlendShape { 
+                            path = bs.path, 
+                            blendShape = bs.blendShape, 
+                            value = bs.offValue
+                        });
                     }
                 }
                 genAnimConfig.animations.Add(offAnim);
@@ -646,6 +664,19 @@ namespace YOTS
 
         private static GeneratedAnimatorConfig ApplyIndependentFixToAnimatorConfig(GeneratedAnimatorConfig genAnimatorConfig)
         {
+            // Local helper functions to fetch the desired off value
+            float GetOffValueForMesh(string path, List<GeneratedMeshToggle> offList)
+            {
+                var offToggle = offList?.FirstOrDefault(mt => mt.path == path);
+                return offToggle != null ? offToggle.value : 0.0f;
+            }
+
+            float GetOffValueForBlend(string path, string blendShapeName, List<GeneratedBlendShape> offList)
+            {
+                var offBlend = offList?.FirstOrDefault(bs => bs.path == path && bs.blendShape == blendShapeName);
+                return offBlend != null ? offBlend.value : 0.0f;
+            }
+
             // Group paired animations by toggle name (extracted from the animation name by removing _On/_Off).
             Dictionary<string, (GeneratedAnimationClipConfig on, GeneratedAnimationClipConfig off)> toggleAnimations =
                 new Dictionary<string, (GeneratedAnimationClipConfig, GeneratedAnimationClipConfig)>();
@@ -785,7 +816,6 @@ namespace YOTS
                         foreach (var mt in pair.on.meshToggles)
                         {
                             string attr = "MeshToggle:" + mt.path;
-                            // If no other toggle affects this attribute, mark as independent.
                             if (attributeToToggles[attr].Count == 1)
                             {
                                 independentMesh.Add(mt);
@@ -821,24 +851,30 @@ namespace YOTS
 
                     if (hasIndependent && hasDependent)
                     {
-                        // Split into two animation pairs.
-                        // Create the dependent pair (remain in this (override) layer).
+                        // Create the dependent pair using the on values from the original config
                         GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
                         dependentOn.name = toggleName + "_Dependent_On";
                         dependentOn.meshToggles = dependentMesh;
                         dependentOn.blendShapes = dependentBlend;
 
-                        // For the Off animation, assume zero values; so copy and set value = 0.
+                        // Build the Off animation using the user-specified off values
                         GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
                         dependentOff.name = toggleName + "_Dependent_Off";
                         dependentOff.meshToggles = dependentMesh
-                            .Select(mt => new GeneratedMeshToggle { path = mt.path, value = 0.0f })
+                            .Select(mt => new GeneratedMeshToggle {
+                                path = mt.path,
+                                value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
+                            })
                             .ToList();
                         dependentOff.blendShapes = dependentBlend
-                            .Select(bs => new GeneratedBlendShape { path = bs.path, blendShape = bs.blendShape, value = 0.0f })
+                            .Select(bs => new GeneratedBlendShape {
+                                path = bs.path,
+                                blendShape = bs.blendShape,
+                                value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
+                            })
                             .ToList();
 
-                        // Create the independent pair (to be added in the base layer).
+                        // Create the independent pair similarly.
                         GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
                         independentOn.name = toggleName + "_Independent_On";
                         independentOn.meshToggles = independentMesh;
@@ -847,13 +883,19 @@ namespace YOTS
                         GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
                         independentOff.name = toggleName + "_Independent_Off";
                         independentOff.meshToggles = independentMesh
-                            .Select(mt => new GeneratedMeshToggle { path = mt.path, value = 0.0f })
+                            .Select(mt => new GeneratedMeshToggle {
+                                path = mt.path,
+                                value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
+                            })
                             .ToList();
                         independentOff.blendShapes = independentBlend
-                            .Select(bs => new GeneratedBlendShape { path = bs.path, blendShape = bs.blendShape, value = 0.0f })
+                            .Select(bs => new GeneratedBlendShape {
+                                path = bs.path,
+                                blendShape = bs.blendShape,
+                                value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
+                            })
                             .ToList();
 
-                        // Add our new animations.
                         newAnimations.Add(dependentOn);
                         newAnimations.Add(dependentOff);
                         newAnimations.Add(independentOn);
@@ -863,11 +905,9 @@ namespace YOTS
                         AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
                         foreach (var entry in overrideLayer.directBlendTree.entries)
                         {
-                            // Here we assume the entry originally matches the toggle name.
                             if (entry.name.StartsWith(toggleName) &&
                                 (entry.name.EndsWith("_On") || entry.name.EndsWith("_Off")))
                             {
-                                // Change the suffix to _Dependent_...
                                 if (entry.name.EndsWith("_On"))
                                 {
                                     entry.name = toggleName + "_Dependent_On";
@@ -897,7 +937,6 @@ namespace YOTS
                     else if (hasIndependent && !hasDependent)
                     {
                         // All affected attributes are independent.
-                        // Move the entire animation pair into the base layer as _Independent.
                         GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
                         independentOn.name = toggleName + "_Independent_On";
                         independentOn.meshToggles = pair.on.meshToggles;
@@ -910,10 +949,9 @@ namespace YOTS
                         newAnimations.Add(independentOn);
                         newAnimations.Add(independentOff);
 
-                        // Remove the entries from the override layer.
+                        // Remove the entries from the override layer and add new entries to the base layer.
                         AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
                         overrideLayer.directBlendTree.entries.RemoveAll(e => e.name.StartsWith(toggleName));
-                        // Add new entries to the base layer.
                         if (baseLayer != null)
                         {
                             baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry
@@ -931,7 +969,6 @@ namespace YOTS
                     else if (!hasIndependent && hasDependent)
                     {
                         // All affected attributes are shared.
-                        // Simply rename the pair in the override layer with a _Dependent suffix.
                         GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
                         dependentOn.name = toggleName + "_Dependent_On";
                         dependentOn.meshToggles = pair.on.meshToggles;
@@ -962,7 +999,7 @@ namespace YOTS
                             }
                         }
                     }
-                    // In the very unlikely event that there are no affected attributes, nothing is added.
+                    // If there are no affected attributes, nothing is added.
                 }
             }
 
@@ -1003,9 +1040,51 @@ namespace YOTS
             return config;
         }
 
-        private static void GenerateVRChatAssets(List<string> parameters, string generatedDir, string existingParamsPath = null, string existingMenuPath = null)
+        private static VRCExpressionsMenu GetOrCreateSubmenu(VRCExpressionsMenu parentMenu, string submenuName, string generatedDir)
         {
-            // Create VRC Parameters
+            if (parentMenu.controls == null)
+                parentMenu.controls = new List<VRCExpressionsMenu.Control>();
+
+            // Look for an existing submenu control with the given name.
+            foreach (var control in parentMenu.controls)
+            {
+                if (control.type == VRCExpressionsMenu.Control.ControlType.SubMenu &&
+                    control.name == submenuName && control.subMenu != null)
+                {
+                    return control.subMenu;
+                }
+            }
+
+            // Not found; create a new submenu asset.
+            var newSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+            newSubmenu.name = submenuName;
+            if (newSubmenu.controls == null)
+                newSubmenu.controls = new List<VRCExpressionsMenu.Control>();
+
+            string submenuAssetPath = Path.Combine(generatedDir, submenuName + "_Submenu.asset");
+            AssetDatabase.CreateAsset(newSubmenu, submenuAssetPath);
+            AssetDatabase.SaveAssets();
+
+            // Add a control in the parent menu for the submenu.
+            var newControl = new VRCExpressionsMenu.Control
+            {
+                name = submenuName,
+                type = VRCExpressionsMenu.Control.ControlType.SubMenu,
+                subMenu = newSubmenu
+            };
+            parentMenu.controls.Add(newControl);
+            EditorUtility.SetDirty(parentMenu);
+            Debug.Log($"Created submenu '{submenuName}' at {submenuAssetPath}");
+
+            return newSubmenu;
+        }
+
+        private static void GenerateVRChatAssets(List<ToggleSpec> toggleSpecs, string generatedDir, string existingParamsPath = null, string existingMenuPath = null)
+        {
+            // Create a unique list of toggle names for the parameters.
+            List<string> parameters = toggleSpecs.Select(t => t.name).Distinct().ToList();
+
+            // Create or update the VRC Expression Parameters asset.
             VRCExpressionParameters expressionParameters;
             if (!string.IsNullOrEmpty(existingParamsPath))
             {
@@ -1021,15 +1100,12 @@ namespace YOTS
                 expressionParameters = ScriptableObject.CreateInstance<VRCExpressionParameters>();
             }
 
-            // Convert existing parameters to list for modification
+            // Merge existing parameters with new toggle parameters.
             var paramList = new List<VRCExpressionParameters.Parameter>();
             if (expressionParameters.parameters != null)
             {
-                // Add existing parameters that don't conflict with YOTS parameters
                 paramList.AddRange(expressionParameters.parameters.Where(p => !parameters.Contains(p.name)));
             }
-            
-            // Add YOTS parameters
             foreach (var param in parameters)
             {
                 paramList.Add(new VRCExpressionParameters.Parameter
@@ -1040,25 +1116,17 @@ namespace YOTS
                     saved = true
                 });
             }
-
             expressionParameters.parameters = paramList.ToArray();
-            
-            // Create YOTS submenu
-            var yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
-            foreach (var param in parameters)
-            {
-                yotsSubmenu.controls.Add(new VRCExpressionsMenu.Control
-                {
-                    name = param,
-                    type = VRCExpressionsMenu.Control.ControlType.Toggle,
-                    parameter = new VRCExpressionsMenu.Control.Parameter { name = param },
-                    value = 1f
-                });
-            }
 
-            // Handle the main menu
+            // Handle the main menu: if an existing menu asset was provided, update it.
             VRCExpressionsMenu mainMenu;
-            if (!string.IsNullOrEmpty(existingMenuPath))
+            if (string.IsNullOrEmpty(existingMenuPath))
+            {
+                mainMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+                if (mainMenu.controls == null)
+                    mainMenu.controls = new List<VRCExpressionsMenu.Control>();
+            }
+            else
             {
                 mainMenu = AssetDatabase.LoadAssetAtPath<VRCExpressionsMenu>(existingMenuPath);
                 if (mainMenu == null)
@@ -1066,20 +1134,50 @@ namespace YOTS
                     Debug.LogError($"Could not load existing menu at path: {existingMenuPath}");
                     return;
                 }
-                
-                // Remove any existing YOTS submenu
+                // Remove any existing YOTS submenu from the main menu.
                 mainMenu.controls.RemoveAll(c => c.name == "YOTS");
             }
-            else
+
+            // Create the root YOTS submenu.
+            var yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+            yotsSubmenu.name = "YOTS";
+            if (yotsSubmenu.controls == null)
+                yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
+
+            string yotsSubmenuPath = Path.Combine(generatedDir, "YOTS_Submenu.asset");
+            AssetDatabase.CreateAsset(yotsSubmenu, yotsSubmenuPath);
+            Debug.Log("Created YOTS submenu at: " + yotsSubmenuPath);
+
+            // For each toggle, determine where its control should live based on its menuPath.
+            foreach (var toggle in toggleSpecs)
             {
-                mainMenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+                VRCExpressionsMenu currentMenu = yotsSubmenu;
+                // A menuPath of "/" (or an empty string) means "stay at the root."
+                if (!string.IsNullOrEmpty(toggle.menuPath) && toggle.menuPath != "/")
+                {
+                    // Remove extra slashes and split into sections.
+                    string trimmedPath = toggle.menuPath.Trim('/');
+                    var sections = trimmedPath.Split('/');
+
+                    // Recursively get or create each submenu.
+                    foreach (var section in sections)
+                    {
+                        currentMenu = GetOrCreateSubmenu(currentMenu, section, generatedDir);
+                    }
+                }
+
+                // Add the toggle control to the (terminal) submenu.
+                currentMenu.controls.Add(new VRCExpressionsMenu.Control
+                {
+                    name = toggle.name,
+                    type = VRCExpressionsMenu.Control.ControlType.Toggle,
+                    parameter = new VRCExpressionsMenu.Control.Parameter { name = toggle.name },
+                    value = 1f
+                });
+                EditorUtility.SetDirty(currentMenu);
             }
 
-            // Save the YOTS submenu asset
-            string submenuPath = Path.Combine(generatedDir, "YOTS_Submenu.asset");
-            AssetDatabase.CreateAsset(yotsSubmenu, submenuPath);
-
-            // Add YOTS submenu to main menu
+            // Add the complete YOTS submenu as a control in the main menu.
             mainMenu.controls.Add(new VRCExpressionsMenu.Control
             {
                 name = "YOTS",
@@ -1087,7 +1185,7 @@ namespace YOTS
                 subMenu = yotsSubmenu
             });
 
-            // Save the assets
+            // Save the assets.
             if (string.IsNullOrEmpty(existingParamsPath))
             {
                 string paramPath = Path.Combine(generatedDir, "YOTS_Parameters.asset");
@@ -1102,9 +1200,9 @@ namespace YOTS
 
             if (string.IsNullOrEmpty(existingMenuPath))
             {
-                string menuPath = Path.Combine(generatedDir, "YOTS_Menu.asset");
-                AssetDatabase.CreateAsset(mainMenu, menuPath);
-                Debug.Log($"Generated new VRChat menu at: {menuPath}");
+                string mainMenuPath = Path.Combine(generatedDir, "YOTS_Menu.asset");
+                AssetDatabase.CreateAsset(mainMenu, mainMenuPath);
+                Debug.Log($"Generated new VRChat menu at: {mainMenuPath}");
             }
             else
             {
@@ -1112,7 +1210,7 @@ namespace YOTS
                 Debug.Log($"Updated existing VRChat menu at: {existingMenuPath}");
             }
 
-            Debug.Log($"Generated YOTS submenu at: {submenuPath}");
+            //Debug.Log($"Generated YOTS submenu at: {yotsSubmenuPath}");
         }
 
         public static void GenerateAnimator(string configPath = null, string animatorName = "YOTS_FX", string existingParamsPath = null, string existingMenuPath = null)
@@ -1186,7 +1284,7 @@ namespace YOTS
             genAnimatorConfig = RemoveUnusedAnimations(genAnimatorConfig);
 
             // Generate VRChat parameters and menu
-            GenerateVRChatAssets(genAnimatorConfig.parameters, generatedDir, existingParamsPath, existingMenuPath);
+            GenerateVRChatAssets(config.toggles, generatedDir, existingParamsPath, existingMenuPath);
 
             // Save the generated animator configuration JSON file. This is for
             // debuggability.
