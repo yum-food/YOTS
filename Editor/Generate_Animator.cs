@@ -14,6 +14,10 @@ namespace YOTS
     {
         [SerializeField]
         public string name;
+        
+        [SerializeField]
+        public string type = "toggle";
+
         // Dependencies are evaluated before this one. They must share one or
         // more attributes with this spec.
         [SerializeField]
@@ -1108,8 +1112,12 @@ namespace YOTS
 
         private static void GenerateVRChatAssets(List<ToggleSpec> toggleSpecs, string generatedDir, string existingParamsPath = null, string existingMenuPath = null)
         {
-            // Create a unique list of toggle names for the parameters.
-            List<string> parameters = toggleSpecs.Select(t => t.name).Distinct().ToList();
+            // Create a unique list of toggle specs for adding parameters
+            var uniqueToggles = toggleSpecs
+                .Where(t => t.name != "YOTS_Weight")  // Skip the special YOTS_Weight parameter
+                .GroupBy(t => t.name)
+                .Select(g => g.First())
+                .ToList();
 
             // Create or update the VRC Expression Parameters asset.
             VRCExpressionParameters expressionParameters;
@@ -1126,14 +1134,18 @@ namespace YOTS
             // Merge existing parameters with new toggle parameters.
             var paramList = new List<VRCExpressionParameters.Parameter>();
             if (expressionParameters.parameters != null) {
-                paramList.AddRange(expressionParameters.parameters.Where(p => !parameters.Contains(p.name)));
+                // Remove any parameters that have the same name as our unique toggles
+                paramList.AddRange(expressionParameters.parameters.Where(p => !uniqueToggles.Any(t => t.name == p.name)));
             }
-            foreach (var param in parameters) {
+            foreach (var toggle in uniqueToggles)
+            {
+                // For the VRChat parameters: toggles become booleans and radials stay floats.
                 paramList.Add(new VRCExpressionParameters.Parameter
                 {
-                    name = param,
-                    valueType = VRCExpressionParameters.ValueType.Float,
-                    defaultValue = 1.0f,
+                    name = toggle.name,
+                    valueType = toggle.type == "radial" ? VRCExpressionParameters.ValueType.Float : VRCExpressionParameters.ValueType.Bool,
+                    // defaultValue of 0 means "false" for a toggle; adjust as desired for sliders.
+                    defaultValue = 0f,
                     saved = true
                 });
             }
@@ -1188,7 +1200,6 @@ namespace YOTS
                     // Remove extra slashes and split into sections.
                     string trimmedPath = toggle.menuPath.Trim('/');
                     var sections = trimmedPath.Split('/');
-
                     // Recursively get or create each submenu.
                     foreach (var section in sections)
                     {
@@ -1196,14 +1207,31 @@ namespace YOTS
                     }
                 }
 
-                // Add the toggle control to the (terminal) submenu.
-                currentMenu.controls.Add(new VRCExpressionsMenu.Control
+                // Create a control based on toggle type.
+                if (toggle.type == "radial")
                 {
-                    name = toggle.name,
-                    type = VRCExpressionsMenu.Control.ControlType.Toggle,
-                    parameter = new VRCExpressionsMenu.Control.Parameter { name = toggle.name },
-                    value = 1f
-                });
+                    // Radial puppet
+                    currentMenu.controls.Add(new VRCExpressionsMenu.Control
+                    {
+                        name = toggle.name,
+                        type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+                        // Shoutsout av3emulator/Lyuma for showing how to do this.
+                        subParameters = new VRCExpressionsMenu.Control.Parameter[] {
+                            new VRCExpressionsMenu.Control.Parameter { name = toggle.name }
+                        }
+                    });
+                }
+                else
+                {
+                    // Standard toggle
+                    currentMenu.controls.Add(new VRCExpressionsMenu.Control
+                    {
+                        name = toggle.name,
+                        type = VRCExpressionsMenu.Control.ControlType.Toggle,
+                        parameter = new VRCExpressionsMenu.Control.Parameter { name = toggle.name },
+                        value = 1f
+                    });
+                }
                 EditorUtility.SetDirty(currentMenu);
             }
 
