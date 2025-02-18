@@ -1042,6 +1042,7 @@ namespace YOTS
 
         private static VRCExpressionsMenu GetOrCreateSubmenu(VRCExpressionsMenu parentMenu, string submenuName, string generatedDir)
         {
+            Debug.Log($"Getting or creating submenu {submenuName} under {parentMenu.name} at {generatedDir}");
             if (parentMenu.controls == null)
                 parentMenu.controls = new List<VRCExpressionsMenu.Control>();
 
@@ -1074,9 +1075,35 @@ namespace YOTS
             };
             parentMenu.controls.Add(newControl);
             EditorUtility.SetDirty(parentMenu);
+            EditorUtility.SetDirty(newSubmenu);
             Debug.Log($"Created submenu '{submenuName}' at {submenuAssetPath}");
 
             return newSubmenu;
+        }
+
+        private static void InitializeSubmenu(VRCExpressionsMenu menu)
+        {
+            if (menu == null) return;
+            
+            // Clear existing controls
+            if (menu.controls != null)
+            {
+                // Recursively initialize any existing submenus before removing them
+                foreach (var control in menu.controls)
+                {
+                    if (control.type == VRCExpressionsMenu.Control.ControlType.SubMenu && control.subMenu != null)
+                    {
+                        InitializeSubmenu(control.subMenu);
+                    }
+                }
+                menu.controls.Clear();
+            }
+            else
+            {
+                menu.controls = new List<VRCExpressionsMenu.Control>();
+            }
+            
+            EditorUtility.SetDirty(menu);
         }
 
         private static void GenerateVRChatAssets(List<ToggleSpec> toggleSpecs, string generatedDir, string existingParamsPath = null, string existingMenuPath = null)
@@ -1086,28 +1113,22 @@ namespace YOTS
 
             // Create or update the VRC Expression Parameters asset.
             VRCExpressionParameters expressionParameters;
-            if (!string.IsNullOrEmpty(existingParamsPath))
-            {
+            if (string.IsNullOrEmpty(existingParamsPath)) {
+                expressionParameters = ScriptableObject.CreateInstance<VRCExpressionParameters>();
+            } else {
                 expressionParameters = AssetDatabase.LoadAssetAtPath<VRCExpressionParameters>(existingParamsPath);
-                if (expressionParameters == null)
-                {
+                if (expressionParameters == null) {
                     Debug.LogError($"Could not load existing parameters at path: {existingParamsPath}");
                     return;
                 }
             }
-            else
-            {
-                expressionParameters = ScriptableObject.CreateInstance<VRCExpressionParameters>();
-            }
 
             // Merge existing parameters with new toggle parameters.
             var paramList = new List<VRCExpressionParameters.Parameter>();
-            if (expressionParameters.parameters != null)
-            {
+            if (expressionParameters.parameters != null) {
                 paramList.AddRange(expressionParameters.parameters.Where(p => !parameters.Contains(p.name)));
             }
-            foreach (var param in parameters)
-            {
+            foreach (var param in parameters) {
                 paramList.Add(new VRCExpressionParameters.Parameter
                 {
                     name = param,
@@ -1138,15 +1159,24 @@ namespace YOTS
                 mainMenu.controls.RemoveAll(c => c.name == "YOTS");
             }
 
-            // Create the root YOTS submenu.
-            var yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
-            yotsSubmenu.name = "YOTS";
-            if (yotsSubmenu.controls == null)
-                yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
-
+            // Create or load the root YOTS submenu
             string yotsSubmenuPath = Path.Combine(generatedDir, "YOTS_Submenu.asset");
-            AssetDatabase.CreateAsset(yotsSubmenu, yotsSubmenuPath);
-            Debug.Log("Created YOTS submenu at: " + yotsSubmenuPath);
+            VRCExpressionsMenu yotsSubmenu;
+            
+            if (AssetDatabase.LoadAssetAtPath<VRCExpressionsMenu>(yotsSubmenuPath) != null)
+            {
+                yotsSubmenu = AssetDatabase.LoadAssetAtPath<VRCExpressionsMenu>(yotsSubmenuPath);
+                InitializeSubmenu(yotsSubmenu);
+                Debug.Log("Reset existing YOTS submenu at: " + yotsSubmenuPath);
+            }
+            else
+            {
+                yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
+                yotsSubmenu.name = "YOTS";
+                yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
+                AssetDatabase.CreateAsset(yotsSubmenu, yotsSubmenuPath);
+                Debug.Log("Created new YOTS submenu at: " + yotsSubmenuPath);
+            }
 
             // For each toggle, determine where its control should live based on its menuPath.
             foreach (var toggle in toggleSpecs)
