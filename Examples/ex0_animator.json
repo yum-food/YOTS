@@ -1,0 +1,30 @@
+{
+  "api_version": "1.0",
+  "toggles": [
+    {
+      "name": "Shirt",
+      "meshToggles": ["Shirt"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Chest_Hide"
+        }
+      ]
+    },
+    {
+      "name": "Jacket",
+      "dependencies": ["Shirt"],
+      "meshToggles": ["Jacket"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Chest_Hide"
+        },
+        {
+          "path": "Shirt",
+          "blendShape": "Chest_Hide"
+        }
+      ]
+    }
+  ]
+}
