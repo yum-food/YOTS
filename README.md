@@ -8,25 +8,115 @@ two core problems:
 2. Toggles may have dependencies which prevent them from being combined.
 
 The core idea is to use declared dependencies between toggles to perform a
-topological sort, then flatten each layer of the sort into a single DBT in one
-layer.
+topological sort, then flatten each layer of the sort into a single DBT.
 
 yum!
+
+## Real world example
+
+Here's a fairly simple animator I made for an avatar I'm working on. You would
+write and maintain this config file. YOTS uses it to generate the menus,
+parameters, and animator. You hook those into your avatar and upload.
+
+```json
+{
+  "api_version": "1.0",
+  "toggles": [
+    {
+      "name": "Shirt",
+      "menuPath": "/Clothes",
+      "dependencies": ["Bra"],
+      "meshToggles": ["Shirt"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Bra on"
+        },
+        {
+          "path": "Body",
+          "blendShape": "Smush nips"
+        },
+        {
+          "path": "Skirt",
+          "blendShape": "Shirt off",
+          "offValue": 100.0,
+          "onValue": 0.0
+        }
+      ]
+    },
+    {
+      "name": "Skirt",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Skirt"],
+      "blendShapes": []
+    },
+    {
+      "name": "Socks",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Socks"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Thigh squish"
+        }
+      ]
+    },
+    {
+      "name": "Shoes",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Shoes"],
+      "blendShapes": []
+    },
+
+    {
+      "name": "Bra",
+      "menuPath": "/NSFW",
+      "meshToggles": ["Bra"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Bra on"
+        },
+        {
+          "path": "Body",
+          "blendShape": "Smush nips"
+        }
+      ]
+    },
+    {
+      "name": "Panties",
+      "menuPath": "/NSFW",
+      "meshToggles": ["Panties"],
+      "blendShapes": []
+    },
+
+    {
+      "name": "Hair",
+      "menuPath": "/Misc",
+      "meshToggles": ["Hair"],
+      "blendShapes": []
+    }
+  ]
+}
+```
 
 ## Design overview by example
 
 Consider this basic example: you have a shirt and a jacket. The shirt hides the
 chest to avoid clipping. The jacket hides the shirt sleeves to hide clipping:
 
+```
 - [ToggleSpec] Shirt
   - [MeshToggle] Shirt
   - [BlendShape] Chest hidden
 - [ToggleSpec] Jacket
   - [MeshToggle] Jacket
   - [BlendShape] Shirt sleeves hidden
+```
 
 A system could trivially be made to generate animations for this:
 
+```
 - [Animation] ShirtOn
   - [MeshToggle] Shirt on
   - [BlendShape] Chest hide -> 100
@@ -39,6 +129,7 @@ A system could trivially be made to generate animations for this:
 - [Animation] JacketOff
   - [MeshToggle] Jacket off
   - [BlendShape] Shirt sleeves hide -> 0
+```
 
 This system works perfectly as written and can be trivially implemented by
 driving all 4 animations in a single layer with one DBT.
@@ -46,18 +137,22 @@ Problems arise when you have two assets that want to animate the same
 blendshape. In that case, you must declare a dependency. In our example,
 suppose we wanted to add an undershirt. It also wants to hide the chest:
 
+```
 - [ToggleSpec] Undershirt
   - [MeshToggle] Undershirt
   - [BlendShape] Chest hidden
+```
 
 The animations are also trivial:
 
+```
 - [Animation] UndershirtOn
   - [MeshToggle] Undershirt on
   - [BlendShape] Chest hide -> 100
 - [Animation] UndershirtOff
   - [MeshToggle] Undershirt Off
   - [BlendShape] Chest hide -> 0
+```
 
 The problem is that since Undershirt{On,Off} and Shirt{On,Off} both animate the
 "Chest hide" blendshape, you cannot put them into the same DBT. It's even worse
@@ -70,6 +165,7 @@ To fix this, we can declare a *dependency*. In this case the order doesn't
 matter, so I will just use the convention that outer layers of garments depend
 on inner layers.
 
+```
 - [ToggleSpec] Undershirt
   - [MeshToggle] Undershirt
   - [BlendShape] Chest hidden
@@ -77,6 +173,7 @@ on inner layers.
   - [Dependency] Undershirt
   - [MeshToggle] Shirt
   - [BlendShape] Chest hidden
+```
 
 This situation can be detected robustly. We simply do a topological sort of all
 ToggleSpec nodes according to their declared dependencies. This will give us a
@@ -120,9 +217,6 @@ independent part may be comprised of the empty set, in which case it is
 discarded. If it's not empty, it's added to the first layer's DBT. The
 dependent part is guaranteed to be non-empty, and is simply added to a new DBT.
 
-(TODO is this new DBT actually possible? Can you have a DBT without off
-animations? If not, do you just need to use a regular blendtree?)
-
 ## Specification language
 
 We use JSON to represent the specification. The example above is expressed as
@@ -131,7 +225,7 @@ follows:
 ```json
 {
   "api_version": "1.0",
-  "toggleSpecs": [
+  "toggles": [
     {
       "name": "Undershirt",
       "meshToggles": ["Undershirt"],

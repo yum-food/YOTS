@@ -1209,8 +1209,6 @@ namespace YOTS
                 EditorUtility.SetDirty(mainMenu);
                 Debug.Log($"Updated existing VRChat menu at: {existingMenuPath}");
             }
-
-            //Debug.Log($"Generated YOTS submenu at: {yotsSubmenuPath}");
         }
 
         public static void GenerateAnimator(string configPath = null, string animatorName = "YOTS_FX", string existingParamsPath = null, string existingMenuPath = null)
