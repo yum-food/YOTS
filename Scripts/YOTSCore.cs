@@ -206,6 +206,8 @@ namespace YOTS
 
     public class YOTSCore
     {
+        private static Dictionary<string, AnimationClip> animationClipCache = new Dictionary<string, AnimationClip>();
+
         public static AnimatorController GenerateAnimator(
             string configJson,
             VRCExpressionParameters vrcParams,
@@ -265,15 +267,6 @@ namespace YOTS
 
         private static void CreateAnimationClips(GeneratedAnimationsConfig animationsConfig)
         {
-            // Ensure the directory exists
-            string baseDir = "Assets/YOTS_generated";
-            string animDir = Path.Combine(baseDir, "Animations");
-            
-            if (!Directory.Exists(baseDir))
-                Directory.CreateDirectory(baseDir);
-            if (!Directory.Exists(animDir))
-                Directory.CreateDirectory(animDir);
-
             foreach (var clipConfig in animationsConfig.animations)
             {
                 AnimationClip newClip = new AnimationClip();
@@ -301,14 +294,10 @@ namespace YOTS
                     AnimationUtility.SetEditorCurve(newClip, binding, curve);
                 }
 
-                // Save the animation clip to the specified directory
-                string assetPath = Path.Combine(animDir, clipConfig.name + ".anim");
-                AssetDatabase.CreateAsset(newClip, assetPath);
-                Debug.Log("Created/Updated animation clip: " + assetPath);
+                // Store in memory cache
+                animationClipCache[clipConfig.name] = newClip;
+                Debug.Log("Created animation clip in memory: " + clipConfig.name);
             }
-            
-            AssetDatabase.SaveAssets();
-            AssetDatabase.Refresh();
         }
 
         private static AnimatorController GenerateAnimatorController(GeneratedAnimatorConfig animatorConfig)
@@ -361,11 +350,9 @@ namespace YOTS
                 foreach (var entry in entries.OrderBy(e => e.name.EndsWith("_On")))
                 {
                     Debug.Log("Adding child motion for: " + entry.name);
-                    string clipPath = $"Assets/YOTS_generated/Animations/{entry.name}.anim";
-                    AnimationClip clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath);
-                    if (clip == null)
+                    if (!animationClipCache.TryGetValue(entry.name, out AnimationClip clip))
                     {
-                        Debug.LogWarning("Animation clip not found at: " + clipPath);
+                        Debug.LogWarning("Animation clip not found in memory: " + entry.name);
                         continue;
                     }
 
@@ -413,11 +400,9 @@ namespace YOTS
 
                 foreach (var entry in layerConfig.directBlendTree.entries)
                 {
-                    string clipPath = $"Assets/YOTS_generated/Animations/{entry.name}.anim";
-                    AnimationClip clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(clipPath);
-                    if (clip == null)
+                    if (!animationClipCache.TryGetValue(entry.name, out AnimationClip clip))
                     {
-                        Debug.LogWarning("Animation clip not found at: " + clipPath);
+                        Debug.LogWarning("Animation clip not found in memory: " + entry.name);
                         continue;
                     }
                     
