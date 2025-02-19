@@ -527,7 +527,7 @@ namespace YOTS
             {
                 var depthGroup = togglesByDepth[i];
                 AnimatorLayer layer = new AnimatorLayer();
-                layer.name = i == 0 ? "BaseLayer" : $"OverrideLayer{(i - 1).ToString("00")}";
+                layer.name = i == 0 ? "YOTS_BaseLayer" : $"YOTS_OverrideLayer{(i - 1).ToString("00")}";
                 
                 foreach (var toggle in depthGroup)
                 {
