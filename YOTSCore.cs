@@ -1,3 +1,5 @@
+#if UNITY_EDITOR
+
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -13,23 +15,42 @@ namespace YOTS
     [System.Serializable]
     public class ToggleSpec
     {
+        // The name of the toggle. This is plumbed into the menu, the VRChat
+        // parameters, and the animator parameters.
         [SerializeField]
         public string name;
         
+        // The type of toggle.
+        // Accepted values:
+        //  "toggle" - A boolean toggle. Creates a boolean sync param.
+        //  "radial" - A radial puppet. Creates a float sync param.
         [SerializeField]
         public string type = "toggle";
 
-        // Dependencies are evaluated before this one. They must share one or
-        // more attributes with this spec.
+        // Dependencies are toggles that will be evaluated before this one. If
+        // you have two toggles which animate the same thing, one must depend
+        // on the other.
         [SerializeField]
         public List<string> dependencies = new List<string>();
+
+        // The name of meshes to toggle.
+        // For example, "Body" or "Shirt".
         [SerializeField]
         public List<string> meshToggles = new List<string>();
+
+        // Blendshapes to animate.
         [SerializeField]
         public List<BlendShapeSpec> blendShapes = new List<BlendShapeSpec>();
+
+        // Where to put the toggle in the menu. All toggles are placed under
+        // /YOTS. So if you put "Clothes" here, it'll be placed under
+        // /YOTS/Clothes.
         [SerializeField]
         public string menuPath = "/";
 
+        // The default value of the toggle.
+        // For example, if you want a gimmick to start toggled off, set this to
+        // 0.0f.
         [SerializeField]
         public float defaultValue = 1.0f;
 
@@ -57,15 +78,21 @@ namespace YOTS
     [System.Serializable]
     public class BlendShapeSpec
     {
+        // The path to the mesh renderer to apply the blend shape to.
+        // For example, "Body" or "Shirt".
         [SerializeField]
         public string path;
         
+        // The name of the blend shape to apply.
+        // For example, "Chest_Hide" or "Boobs+".
         [SerializeField]
         public string blendShape;
 
+        // The value of the blendshape when the toggle is off. Range from 0-100.
         [SerializeField]
         public float offValue = 0.0f;
 
+        // The value of the blendshape when the toggle is on. Range from 0-100.
         [SerializeField]
         public float onValue = 100.0f;
 
@@ -1028,3 +1055,5 @@ namespace YOTS
         }
     }
 }
+
+#endif  // UNITY_EDITOR
