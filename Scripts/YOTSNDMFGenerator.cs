@@ -18,22 +18,26 @@ namespace YOTS
 {
   public class YOTSNDMFGenerator : Plugin<YOTSNDMFGenerator>
   {
-    private readonly Localizer localizer = new Localizer("en-us", () => new List<(string, Func<string, string>)> 
-        {
-        ("en-us", key => key) // Simple pass-through for English
+    private readonly Localizer localizer = new Localizer("en-us", () =>
+        new List<(string, Func<string, string>)> {
+        ("en-us", key => key)
         });
 
     public override string DisplayName => "YOTS Animator Generator";
 
     protected override void Configure()
     {
-      // First pass: Store config data
+      // First pass: Retrieve and stash configuration
       InPhase(BuildPhase.Resolving)
         .Run("Cache YOTS Config", ctx => {
           var config = ctx.AvatarRootObject.GetComponentInChildren<YOTSNDMFConfig>();
           if (config == null || config.jsonConfig == null) {
-            ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.no_config", 
-                "No YOTS config found on the avatar.");
+            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
+                ErrorReport.ReportException(
+                    new Exception("No YOTS config found"), 
+                    "Missing required YOTS configuration"
+                );
+            });
             return;
           }
           ctx.GetState<YOTSBuildState>().jsonConfig = config.jsonConfig.text;
@@ -41,33 +45,38 @@ namespace YOTS
         // Shoutsout anatawa12/AvatarOptimizer
         .BeforePass(RemoveEditorOnlyPass.Instance);
 
-      // Second pass: Generate animator and merge with the original
+      // Second pass: Generate and merge animator
       InPhase(BuildPhase.Transforming)
         .Run("Generate YOTS Animator", ctx => {
-          var state = ctx.GetState<YOTSBuildState>();
-          if (string.IsNullOrEmpty(state.jsonConfig)) {
-            ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.no_config", 
-                "No YOTS config found on the avatar.");
-            return;
-          }
-
           var config = ctx.GetState<YOTSBuildState>();
           if (config == null) {
-            ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.no_config", 
-                "No YOTS config component found on the avatar.");
+            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
+                ErrorReport.ReportException(
+                    new Exception("No YOTS config component found"), 
+                    "Missing required YOTS configuration"
+                );
+            });
             return;
           }
           if (config.jsonConfig == null) {
-            ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.no_json", 
-                "YOTS config component is missing JSON config file.");
+            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
+                ErrorReport.ReportException(
+                    new Exception("Missing JSON config file"), 
+                    "YOTS config component is missing required JSON configuration"
+                );
+            });
             return;
           }
 
           // Get menu and parameters
           var descriptor = ctx.AvatarDescriptor;
           if (descriptor == null) {
-            ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.no_descriptor", 
-                "Avatar descriptor is missing.");
+            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
+                ErrorReport.ReportException(
+                    new Exception("Avatar descriptor is missing"), 
+                    "Cannot find VRC Avatar Descriptor"
+                );
+            });
             return;
           }
           RuntimeAnimatorController originalAnimator = descriptor.baseAnimationLayers[4].animatorController;
@@ -75,11 +84,15 @@ namespace YOTS
           var parameters = descriptor.expressionParameters;
           if (parameters == null || menu == null)
           {
-            ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.missing_assets", 
-                "Avatar parameters or menu is missing.");
+            ErrorReport.WithContextObject(descriptor, () => {
+                ErrorReport.ReportException(
+                    new Exception("Missing required VRC assets"), 
+                    "Avatar is missing required Expression Parameters or Menu"
+                );
+            });
             return;
           }
-          // TODO do we need to make copies?
+          // Create copies so the originals don't get modified
           menu = UnityEngine.Object.Instantiate(menu);
           parameters = UnityEngine.Object.Instantiate(parameters);
           descriptor.expressionsMenu = menu;
@@ -87,22 +100,27 @@ namespace YOTS
 
           // Generate the YOTS animator.
           RuntimeAnimatorController generatedAnimator = YOTSCore.GenerateAnimator(
-              state.jsonConfig,
+              config.jsonConfig,
               parameters,
               menu
           );
           if (generatedAnimator == null) {
-              ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.generation_failed", 
-                  "Failed to generate animator.");
-              return;
+            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
+                ErrorReport.ReportException(
+                    new Exception("Failed to generate animator"), 
+                    "YOTS animator generation failed"
+                );
+            });
+            return;
           }
 
+          // If no original animator, just assign the generated one.
           if (originalAnimator == null)
           {
             descriptor.baseAnimationLayers[4].animatorController = generatedAnimator;
             return;
           }
-
+          // Else append the generated animator to the original.
           AnimatorController originalController = originalAnimator as AnimatorController;
           AnimatorController generatedController = generatedAnimator as AnimatorController;
           MergeAnimatorControllers(localizer, originalController, generatedController);
@@ -119,8 +137,12 @@ namespace YOTS
         // This is an O(m*n) check but m and n should be small enough to not matter.
         if (original.parameters.Any(p => p.name == genParam.name))
         {
-          ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.parameter_conflict",
-              $"Parameter '{genParam.name}' already exists in the original animator.");
+          ErrorReport.WithContextObject(original, () => {
+              ErrorReport.ReportException(
+                  new Exception($"Parameter '{genParam.name}' already exists"), 
+                  "Parameter name conflict in animator"
+              );
+          });
           return;
         }
         original.AddParameter(genParam);
@@ -133,8 +155,12 @@ namespace YOTS
         // YOTS_* that's probably not on purpose.
         if (original.layers.Any(l => l.name == genLayer.name))
         {
-          ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.layer_conflict",
-              $"Layer with name '{genLayer.name}' already exists in the original animator.");
+          ErrorReport.WithContextObject(original, () => {
+              ErrorReport.ReportException(
+                  new Exception($"Layer '{genLayer.name}' already exists"), 
+                  "Layer name conflict in animator"
+              );
+          });
           return;
         }
         var newLayer = new AnimatorControllerLayer

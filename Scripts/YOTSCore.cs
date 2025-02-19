@@ -218,8 +218,7 @@ namespace YOTS
 
             if (string.IsNullOrEmpty(configJson))
             {
-                Debug.LogError("No config JSON provided.");
-                return null;
+                throw new ArgumentException("No config JSON provided.");
             }
             Debug.Log("Parsing JSON configuration");
 
@@ -230,19 +229,16 @@ namespace YOTS
             }
             catch (System.Exception e) 
             {
-                Debug.LogError($"JSON parsing failed: {e.Message}");
-                return null;
+                throw new ArgumentException($"JSON parsing failed: {e.Message}");
             }
             if (config == null) 
             {
-                Debug.LogError("JSON config is empty or invalid");
-                return null;
+                throw new ArgumentException("JSON config is empty or invalid");
             }
             
             if (config.toggles == null) 
             {
-                Debug.LogError("No toggleSpecs found in configuration");
-                return null;
+                throw new ArgumentException("No toggleSpecs found in configuration");
             }
             Debug.Log($"Configuration loaded. Found {config.toggles.Count} toggles.");
 
@@ -352,8 +348,7 @@ namespace YOTS
                     Debug.Log("Adding child motion for: " + entry.name);
                     if (!animationClipCache.TryGetValue(entry.name, out AnimationClip clip))
                     {
-                        Debug.LogWarning("Animation clip not found in memory: " + entry.name);
-                        continue;
+                        throw new InvalidOperationException($"Animation clip not found in memory: {entry.name}");
                     }
 
                     children.Add(new ChildMotion
@@ -402,8 +397,7 @@ namespace YOTS
                 {
                     if (!animationClipCache.TryGetValue(entry.name, out AnimationClip clip))
                     {
-                        Debug.LogWarning("Animation clip not found in memory: " + entry.name);
-                        continue;
+                        throw new InvalidOperationException($"Animation clip not found in memory: {entry.name}");
                     }
                     
                     blendTree.children = blendTree.children.Append(new ChildMotion
