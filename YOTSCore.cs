@@ -173,8 +173,7 @@ namespace YOTS
         public static AnimatorController GenerateAnimator(
             string configJson,
             VRCExpressionParameters existingParams,
-            VRCExpressionsMenu mainMenu,
-            Action<UnityEngine.Object> saveAsset
+            VRCExpressionsMenu mainMenu
         )
         {
             Debug.Log("=== Starting Animator Generation Process ===");
@@ -217,23 +216,17 @@ namespace YOTS
             genAnimatorConfig = RemoveUnusedAnimations(genAnimatorConfig);
 
             // Generate VRChat parameters and menu
-            GenerateVRChatAssets(config.toggles, saveAsset, existingParams, mainMenu);
+            GenerateVRChatAssets(config.toggles, existingParams, mainMenu);
 
             // Create the animation clips directly from the animator config
             // TODO animations should not be persisted to disk unless requested for debuggability
             CreateAnimationClips(new GeneratedAnimationsConfig { animations = genAnimatorConfig.animations });
 
             // Generate and return the animator controller
-            AnimatorController controller = GenerateAnimatorController(genAnimatorConfig, saveAsset);
+            AnimatorController controller = GenerateAnimatorController(genAnimatorConfig);
 
             Debug.Log("=== Animator Generation Process Complete ===");
             return controller;
-        }
-
-        private static AnimationClip AssignOrCreateAnimationClip(AnimationClip newClip, Action<UnityEngine.Object> saveAsset)
-        {
-            saveAsset(newClip);
-            return newClip;
         }
 
         private static void CreateAnimationClips(GeneratedAnimationsConfig animationsConfig)
@@ -284,20 +277,9 @@ namespace YOTS
             AssetDatabase.Refresh();
         }
 
-        private static AnimatorController InitializeAnimatorController(Action<UnityEngine.Object> saveAsset)
+        private static AnimatorController GenerateAnimatorController(GeneratedAnimatorConfig animatorConfig)
         {
             AnimatorController controller = new AnimatorController();
-            saveAsset(controller);
-            Debug.Log("Created new AnimatorController");
-            return controller;
-        }
-
-        private static AnimatorController GenerateAnimatorController(GeneratedAnimatorConfig animatorConfig, Action<UnityEngine.Object> saveAsset)
-        {
-            AnimatorController controller = InitializeAnimatorController(saveAsset);
-            
-            // Save controller first to ensure it exists
-            saveAsset(controller);
 
             controller.AddParameter("YOTS_Weight", AnimatorControllerParameterType.Float);
             controller.parameters[0].defaultFloat = 1.0f;
@@ -314,12 +296,10 @@ namespace YOTS
             var baseLayer = animatorConfig.layers[0];
             var baseStateMachine = new AnimatorStateMachine();
             baseStateMachine.name = "BaseLayer_SM";
-            saveAsset(baseStateMachine);
 
             var rootBlendTree = new BlendTree();
             rootBlendTree.name = "BaseLayer_RootBlendTree";
             rootBlendTree.blendType = BlendTreeType.Direct;
-            saveAsset(rootBlendTree);
 
             var parameterGroups = baseLayer.directBlendTree.entries
                 .GroupBy(e => e.parameter)
@@ -334,7 +314,6 @@ namespace YOTS
                 paramBlendTree.name = $"BlendTree_{param}";
                 paramBlendTree.blendType = BlendTreeType.Simple1D;
                 paramBlendTree.blendParameter = param;
-                saveAsset(paramBlendTree);
 
                 var children = new List<ChildMotion>();
                 foreach (var entry in entries.OrderBy(e => e.name.EndsWith("_On")))
@@ -385,7 +364,6 @@ namespace YOTS
 
                 var stateMachine = new AnimatorStateMachine();
                 stateMachine.name = layerName + "_SM";
-                saveAsset(stateMachine);
 
                 var blendTree = new BlendTree();
                 blendTree.name = layerName + "_BlendTree";
@@ -408,7 +386,6 @@ namespace YOTS
                         directBlendParameter = entry.parameter
                     }).ToArray();
                 }
-                saveAsset(blendTree);
 
                 var state = stateMachine.AddState(layerName + "_State");
                 state.motion = blendTree;
@@ -902,8 +879,7 @@ namespace YOTS
 
         private static VRCExpressionsMenu GetOrCreateSubmenu(
             VRCExpressionsMenu parentMenu, 
-            string submenuName,
-            Action<UnityEngine.Object> saveAsset
+            string submenuName
         )
         {
             if (parentMenu.controls == null)
@@ -917,7 +893,6 @@ namespace YOTS
                 {
                     // Clone existing submenu to avoid modifying original
                     var clonedSubmenu = UnityEngine.Object.Instantiate(control.subMenu);
-                    saveAsset(clonedSubmenu);
                     control.subMenu = clonedSubmenu;
                     return clonedSubmenu;
                 }
@@ -927,7 +902,6 @@ namespace YOTS
             var newSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
             newSubmenu.name = submenuName;
             newSubmenu.controls = new List<VRCExpressionsMenu.Control>();
-            saveAsset(newSubmenu);
 
             var newControl = new VRCExpressionsMenu.Control
             {
@@ -961,7 +935,6 @@ namespace YOTS
 
         private static void GenerateVRChatAssets(
             List<ToggleSpec> toggleSpecs, 
-            Action<UnityEngine.Object> saveAsset,
             VRCExpressionParameters existingParams = null,
             VRCExpressionsMenu mainMenu = null
         )
@@ -1001,7 +974,6 @@ namespace YOTS
             VRCExpressionsMenu yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
             yotsSubmenu.name = "YOTS";
             yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
-            saveAsset(yotsSubmenu);
 
             // Track all created/modified menus to ensure they're saved
             HashSet<VRCExpressionsMenu> modifiedMenus = new HashSet<VRCExpressionsMenu> { mainMenu, yotsSubmenu };
@@ -1015,7 +987,7 @@ namespace YOTS
                     var sections = trimmedPath.Split('/');
                     foreach (var section in sections)
                     {
-                        currentMenu = GetOrCreateSubmenu(currentMenu, section, saveAsset);
+                        currentMenu = GetOrCreateSubmenu(currentMenu, section);
                         modifiedMenus.Add(currentMenu);
                     }
                 }
@@ -1051,17 +1023,6 @@ namespace YOTS
                 type = VRCExpressionsMenu.Control.ControlType.SubMenu,
                 subMenu = yotsSubmenu
             });
-
-            // Save all modified menus
-            foreach (var menu in modifiedMenus)
-            {
-                saveAsset(menu);
-            }
-
-            if (existingParams == null)
-            {
-                saveAsset(expressionParameters);
-            }
         }
     }
 }

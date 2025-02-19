@@ -60,19 +60,14 @@ namespace YOTS
                 "Avatar parameters or menu is missing.");
             return;
           }
-          // Create a clone of the menu and parameters and save them
           menu = UnityEngine.Object.Instantiate(menu);
           parameters = UnityEngine.Object.Instantiate(parameters);
-          ctx.AssetSaver.SaveAsset(menu);
-          ctx.AssetSaver.SaveAsset(parameters);
           descriptor.expressionsMenu = menu;
           descriptor.expressionParameters = parameters;
-          // Generate the animator asset using the BuildContext's AssetSaver
           RuntimeAnimatorController generatedAnimator = YOTSCore.GenerateAnimator(
               config.jsonConfig.text,
               parameters,
-              menu,
-              ctx.AssetSaver.SaveAsset
+              menu
           );
           if (generatedAnimator == null) {
               ErrorReport.ReportError(localizer, ErrorSeverity.Error, "yots.error.generation_failed", 
@@ -81,9 +76,6 @@ namespace YOTS
           }
           // TODO merge animators
           descriptor.baseAnimationLayers[4].animatorController = generatedAnimator;
-
-          // During play mode, apply additional temporary processing to the avatar.
-          //AvatarProcessor.ProcessAvatar(ctx.AvatarRootObject);
         }
       );
     }
