@@ -3,78 +3,24 @@
   "toggles": [
     {
       "name": "Shirt",
-      "menuPath": "/Clothes",
-      "dependencies": ["Bra"],
       "meshToggles": ["Shirt"],
-      "defaultValue": 0.0,
       "blendShapes": [
         {
           "path": "Body",
-          "blendShape": "Bra on"
-        },
-        {
-          "path": "Body",
-          "blendShape": "Smush nips"
-        },
-        {
-          "path": "Skirt",
-          "blendShape": "Shirt off",
-          "offValue": 100.0,
-          "onValue": 0.0
+          "blendShape": "Chest_Hide"
         }
       ]
     },
     {
-      "name": "Skirt",
-      "menuPath": "/Clothes",
-      "meshToggles": ["Skirt"],
-      "blendShapes": []
-    },
-    {
-      "name": "Socks",
-      "menuPath": "/Clothes",
-      "meshToggles": ["Socks"],
+      "name": "Jacket",
+      "dependencies": ["Shirt"],
+      "meshToggles": ["Jacket"],
       "blendShapes": [
         {
           "path": "Body",
-          "blendShape": "Thigh squish"
+          "blendShape": "Chest_Hide"
         }
       ]
-    },
-    {
-      "name": "Shoes",
-      "menuPath": "/Clothes",
-      "meshToggles": ["Shoes"],
-      "blendShapes": []
-    },
-
-    {
-      "name": "Bra",
-      "menuPath": "/NSFW",
-      "meshToggles": ["Bra"],
-      "blendShapes": [
-        {
-          "path": "Body",
-          "blendShape": "Bra on"
-        },
-        {
-          "path": "Body",
-          "blendShape": "Smush nips"
-        }
-      ]
-    },
-    {
-      "name": "Panties",
-      "menuPath": "/NSFW",
-      "meshToggles": ["Panties"],
-      "blendShapes": []
-    },
-
-    {
-      "name": "Hair",
-      "menuPath": "/Misc",
-      "meshToggles": ["Hair"],
-      "blendShapes": []
     }
   ]
 }

@@ -3,24 +3,7 @@
   "toggles": [
     {
       "name": "Shirt",
-      "meshToggles": ["Shirt"],
-      "blendShapes": [
-        {
-          "path": "Body",
-          "blendShape": "Chest_Hide"
-        }
-      ]
-    },
-    {
-      "name": "Jacket",
-      "dependencies": ["Shirt"],
-      "meshToggles": ["Jacket"],
-      "blendShapes": [
-        {
-          "path": "Body",
-          "blendShape": "Chest_Hide"
-        }
-      ]
+      "meshToggles": ["Shirt"]
     }
   ]
 }
