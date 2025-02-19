@@ -305,10 +305,10 @@ namespace YOTS
           }
 
           children.Add(new ChildMotion{
-              motion = clip,
-              timeScale = 1f,
-              threshold = animation.name.EndsWith("_On") ? 1f : 0f
-              });
+            motion = clip,
+            timeScale = 1f,
+            threshold = animation.name.EndsWith("_On") ? 1f : 0f
+          });
         }
         paramBlendTree.children = children.ToArray();
 
@@ -317,9 +317,9 @@ namespace YOTS
         // always set to 1, so the child blendtree always runs.
         rootBlendTree.children = rootBlendTree.children.Append(
             new ChildMotion{
-            motion = paramBlendTree,
-            timeScale = 1f,
-            directBlendParameter = "YOTS_Weight"
+              motion = paramBlendTree,
+              timeScale = 1f,
+              directBlendParameter = "YOTS_Weight"
             }).ToArray();
       }
 
@@ -329,10 +329,10 @@ namespace YOTS
       baseStateMachine.defaultState = baseState;
 
       controller.AddLayer(new AnimatorControllerLayer{
-          name = "YOTS_BaseLayer",
-          defaultWeight = 1.0f,
-          stateMachine = baseStateMachine
-          });
+        name = "YOTS_BaseLayer",
+        defaultWeight = 1.0f,
+        stateMachine = baseStateMachine
+      });
 
       // Add override layers. These are DBTs of On animations (no Off
       // animations).
@@ -353,10 +353,10 @@ namespace YOTS
           }
 
           blendTree.children = blendTree.children.Append(new ChildMotion{
-              motion = clip,
-              timeScale = 1f,
-              directBlendParameter = entry.parameter
-              }).ToArray();
+            motion = clip,
+            timeScale = 1f,
+            directBlendParameter = entry.parameter
+          }).ToArray();
         }
 
         var state = stateMachine.AddState(layerName + "_State");
@@ -365,10 +365,10 @@ namespace YOTS
         stateMachine.defaultState = state;
 
         controller.AddLayer(new AnimatorControllerLayer{
-            name = layerName,
-            defaultWeight = 1.0f,
-            stateMachine = stateMachine
-            });
+          name = layerName,
+          defaultWeight = 1.0f,
+          stateMachine = stateMachine
+        });
 
         Debug.Log($"Added override layer: {layerName}");
       }
@@ -449,19 +449,19 @@ namespace YOTS
           string paramName = toggle.name;
           if (!genAnimatorConfig.parameters.Any(p => p.name == paramName))
             genAnimatorConfig.parameters.Add(new AnimatorParameterSetting{
-                name = paramName,
-                defaultValue = toggle.defaultValue
-                });
+              name = paramName,
+              defaultValue = toggle.defaultValue
+            });
 
           layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-              name = toggle.name + "_On",
-              parameter = paramName
-              });
+            name = toggle.name + "_On",
+            parameter = paramName
+          });
 
           layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-              name = toggle.name + "_Off",
-              parameter = paramName
-              });
+            name = toggle.name + "_Off",
+            parameter = paramName
+          });
         }
         genAnimatorConfig.layers.Add(layer);
       }
@@ -484,10 +484,10 @@ namespace YOTS
         if (toggle.blendShapes != null) {
           foreach (var bs in toggle.blendShapes) {
             onAnim.blendShapes.Add(new GeneratedBlendShape{
-                path = bs.path,
-                blendShape = bs.blendShape,
-                value = bs.onValue
-                });
+              path = bs.path,
+              blendShape = bs.blendShape,
+              value = bs.onValue
+            });
           }
         }
         genAnimConfig.animations.Add(onAnim);
@@ -502,10 +502,10 @@ namespace YOTS
         if (toggle.blendShapes != null) {
           foreach (var bs in toggle.blendShapes) {
             offAnim.blendShapes.Add(new GeneratedBlendShape{
-                path = bs.path,
-                blendShape = bs.blendShape,
-                value = bs.offValue
-                });
+              path = bs.path,
+              blendShape = bs.blendShape,
+              value = bs.offValue
+            });
           }
         }
         genAnimConfig.animations.Add(offAnim);
@@ -654,16 +654,16 @@ namespace YOTS
           dependentOff.name = toggleName + "_Dependent_Off";
           dependentOff.meshToggles = dependentMesh
             .Select(mt => new GeneratedMeshToggle{
-                path = mt.path,
-                value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
-                })
+              path = mt.path,
+              value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
+            })
           .ToList();
           dependentOff.blendShapes = dependentBlend
             .Select(bs => new GeneratedBlendShape{
-                path = bs.path,
-                blendShape = bs.blendShape,
-                value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
-                })
+              path = bs.path,
+              blendShape = bs.blendShape,
+              value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
+            })
           .ToList();
 
           GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
@@ -675,16 +675,16 @@ namespace YOTS
           independentOff.name = toggleName + "_Independent_Off";
           independentOff.meshToggles = independentMesh
             .Select(mt => new GeneratedMeshToggle{
-                path = mt.path,
-                value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
-                })
+              path = mt.path,
+              value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
+            })
           .ToList();
           independentOff.blendShapes = independentBlend
             .Select(bs => new GeneratedBlendShape{
-                path = bs.path,
-                blendShape = bs.blendShape,
-                value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
-                })
+              path = bs.path,
+              blendShape = bs.blendShape,
+              value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
+            })
           .ToList();
 
           newAnimations.Add(dependentOn);
@@ -702,13 +702,13 @@ namespace YOTS
 
           if (baseLayer != null) {
             baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                name = toggleName + "_Independent_On",
-                parameter = toggleName
-                });
+              name = toggleName + "_Independent_On",
+              parameter = toggleName
+            });
             baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                name = toggleName + "_Independent_Off",
-                parameter = toggleName
-                });
+              name = toggleName + "_Independent_Off",
+              parameter = toggleName
+            });
           }
         } else if (hasIndependent) {
           GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
@@ -727,13 +727,13 @@ namespace YOTS
           overrideLayer.directBlendTree.entries.RemoveAll(e => e.name.StartsWith(toggleName));
           if (baseLayer != null) {
             baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                name = toggleName + "_Independent_On",
-                parameter = toggleName
-                });
+              name = toggleName + "_Independent_On",
+              parameter = toggleName
+            });
             baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                name = toggleName + "_Independent_Off",
-                parameter = toggleName
-                });
+              name = toggleName + "_Independent_Off",
+              parameter = toggleName
+            });
           }
         } else if (hasDependent) {
           GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
@@ -764,7 +764,8 @@ namespace YOTS
       return genAnimatorConfig;
     }
 
-    private static GeneratedAnimatorConfig RemoveOffAnimationsFromOverrideLayers(GeneratedAnimatorConfig config) {
+    private static GeneratedAnimatorConfig
+        RemoveOffAnimationsFromOverrideLayers(GeneratedAnimatorConfig config) {
       for (int i = 1; i < config.layers.Count; i++) {
         var layer = config.layers[i];
         layer.directBlendTree.entries.RemoveAll(entry => entry.name.EndsWith("_Off"));
@@ -772,7 +773,8 @@ namespace YOTS
       return config;
     }
 
-    private static GeneratedAnimatorConfig RemoveUnusedAnimations(GeneratedAnimatorConfig config) {
+    private static GeneratedAnimatorConfig
+        RemoveUnusedAnimations(GeneratedAnimatorConfig config) {
       HashSet<string> referencedAnimations = new HashSet<string>();
       foreach (var layer in config.layers) {
         foreach (var entry in layer.directBlendTree.entries)
@@ -788,19 +790,12 @@ namespace YOTS
 
     private static VRCExpressionsMenu GetOrCreateSubmenu(
         VRCExpressionsMenu parentMenu,
-        string submenuName
-        ) {
-      if (parentMenu.controls == null)
-        parentMenu.controls = new List<VRCExpressionsMenu.Control>();
-
+        string submenuName) {
       // Check if submenu already exists
       foreach (var control in parentMenu.controls) {
         if (control.type == VRCExpressionsMenu.Control.ControlType.SubMenu &&
             control.name == submenuName && control.subMenu != null) {
-          // Clone existing submenu to avoid modifying original
-          var clonedSubmenu = UnityEngine.Object.Instantiate(control.subMenu);
-          control.subMenu = clonedSubmenu;
-          return clonedSubmenu;
+          return control.subMenu;
         }
       }
 
@@ -811,27 +806,12 @@ namespace YOTS
 
       var newControl = new VRCExpressionsMenu.Control{
         name = submenuName,
-             type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-             subMenu = newSubmenu
+        type = VRCExpressionsMenu.Control.ControlType.SubMenu,
+        subMenu = newSubmenu
       };
       parentMenu.controls.Add(newControl);
 
       return newSubmenu;
-    }
-
-    private static void InitializeSubmenu(VRCExpressionsMenu menu) {
-      if (menu == null) return;
-
-      if (menu.controls != null) {
-        foreach (var control in menu.controls) {
-          if (control.type == VRCExpressionsMenu.Control.ControlType.SubMenu && control.subMenu != null)
-            InitializeSubmenu(control.subMenu);
-        }
-        menu.controls.Clear();
-      }
-      else {
-        menu.controls = new List<VRCExpressionsMenu.Control>();
-      }
     }
 
     private static void GenerateVRChatAssets(
@@ -849,11 +829,11 @@ namespace YOTS
       paramList.AddRange(vrcParams.parameters.Where(p => !uniqueToggles.Any(t => t.name == p.name)));
       foreach (var toggle in uniqueToggles) {
         paramList.Add(new VRCExpressionParameters.Parameter{
-            name = toggle.name,
-            valueType = toggle.type == "radial" ? VRCExpressionParameters.ValueType.Float : VRCExpressionParameters.ValueType.Bool,
-            defaultValue = toggle.defaultValue,
-            saved = true
-            });
+          name = toggle.name,
+          valueType = toggle.type == "radial" ? VRCExpressionParameters.ValueType.Float : VRCExpressionParameters.ValueType.Bool,
+          defaultValue = toggle.defaultValue,
+          saved = true
+        });
       }
       vrcParams.parameters = paramList.ToArray();
       vrcMenu.controls.RemoveAll(c => c.name == "YOTS");
@@ -861,8 +841,6 @@ namespace YOTS
       VRCExpressionsMenu yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
       yotsSubmenu.name = "YOTS";
       yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
-      // Track all created/modified menus to ensure they're saved
-      HashSet<VRCExpressionsMenu> modifiedMenus = new HashSet<VRCExpressionsMenu> { vrcMenu, yotsSubmenu };
       foreach (var toggle in toggleSpecs) {
         VRCExpressionsMenu currentMenu = yotsSubmenu;
         if (!string.IsNullOrEmpty(toggle.menuPath) && toggle.menuPath != "/") {
@@ -876,29 +854,28 @@ namespace YOTS
         // Add toggle controls
         if (toggle.type == "radial") {
           currentMenu.controls.Add(new VRCExpressionsMenu.Control{
-              name = toggle.name,
-              type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
-              subParameters = new VRCExpressionsMenu.Control.Parameter[]{
+            name = toggle.name,
+            type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
+            subParameters = new VRCExpressionsMenu.Control.Parameter[]{
               new VRCExpressionsMenu.Control.Parameter { name = toggle.name }
-              }
-              });
-        }
-        else {
+            }
+          });
+        } else {
           currentMenu.controls.Add(new VRCExpressionsMenu.Control{
-              name = toggle.name,
-              type = VRCExpressionsMenu.Control.ControlType.Toggle,
-              parameter = new VRCExpressionsMenu.Control.Parameter { name = toggle.name },
-              value = 1f
-              });
+            name = toggle.name,
+            type = VRCExpressionsMenu.Control.ControlType.Toggle,
+            parameter = new VRCExpressionsMenu.Control.Parameter { name = toggle.name },
+            value = 1f
+          });
         }
       }
 
       // Add YOTS submenu to main menu
       vrcMenu.controls.Add(new VRCExpressionsMenu.Control{
-          name = "YOTS",
-          type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-          subMenu = yotsSubmenu
-          });
+        name = "YOTS",
+        type = VRCExpressionsMenu.Control.ControlType.SubMenu,
+        subMenu = yotsSubmenu
+      });
     }
   }
 }
