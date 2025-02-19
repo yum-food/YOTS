@@ -7,13 +7,11 @@ using VRC.SDK3.Avatars.ScriptableObjects;
 namespace YOTS
 {
     [DisallowMultipleComponent]
-    public class YOTSNDMFConfig : MonoBehaviour
-    {
+    public class YOTSNDMFConfig : MonoBehaviour {
         [Tooltip("The JSON configuration file.")]
         public TextAsset jsonConfig;
 
-        void OnValidate()
-        {
+        void OnValidate() {
             gameObject.tag = "EditorOnly";
         }
     }

@@ -26,7 +26,6 @@ Open your text editor of choice and paste this in:
     {
       "name": "Shirt",
       "meshToggles": ["Shirt"],
-      "blendShapes": []
     }
   ]
 }
@@ -37,7 +36,7 @@ Feel free to replace "Shirt" with the name of some other mesh on your avatar.
 Save it to Assets/animator.json.
 
 Drag Assets/yum\_food/YOTS.prefab anywhere on your avatar. Select it in the
-hierarchy, and drag Assets/animator.json onto the "JSON config" field.
+hierarchy, and drag Assets/animator.json onto the "Json Config" field.
 
 Enter play mode. Enable an emulator (I use Lyuma's av3emulator). Open your
 menu. You should see a YOTS submenu. Click it, then click Shirt. Your shirt
@@ -52,13 +51,14 @@ A logical sequence of things to try:
 3. Declare a dependency on another toggle with `"dependencies": ["someOtherToggle"]`.
 4. Install a toggle at a custom path with `"menuPath": "/my/custom/path"`.
 5. Add a radial puppet with `"type": "radial"`.
+6. Use `"defaultValue": 0.0` to set a toggle to off by default.
 
 Toggle options are documented in two places:
 
-1. Read the ToggleSpec definition at the top of
+1. The ToggleSpec definition at the top of
    [YOTSCore.cs](./Scripts/YOTSCore.cs). This is the definitive source of
    truth.
-2. Skim the examples under Examples/
+2. The [Examples](./Examples).
 
 ## Motivation
 
@@ -87,7 +87,7 @@ the lifetime of an avatar:
 
 1. Adding new articles of clothing. You now have to edit all your existing
    avatar-wide animations to include them.
-2. Adding new kinds of toggles or sliders. You may want them to affect a large
+2. Adding new toggles or sliders. You may want them to affect a large
    set of items. For example: you added a minimum brightness slider, and now
    have to animate 20 different articles of clothing.
 3. Removing articles of clothing. You should remove them from your avatar-wide
@@ -95,8 +95,7 @@ the lifetime of an avatar:
 4. Removing toggles or sliders. It's easy to accidentally orphan an animator
    layer, or a parameter somewhere.
 
-These are all vastly easier to perform through a textual configuration system
-than through VRChat's native GUI approach.
+These are all vastly easier to perform through YOTS.
 
 ## Design derivation
 

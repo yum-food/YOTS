@@ -16,8 +16,7 @@ using UnityEditor.Animations;
 
 namespace YOTS
 {
-  public class YOTSNDMFGenerator : Plugin<YOTSNDMFGenerator>
-  {
+  public class YOTSNDMFGenerator : Plugin<YOTSNDMFGenerator> {
     private readonly Localizer localizer = new Localizer("en-us", () =>
         new List<(string, Func<string, string>)> {
         ("en-us", key => key)
@@ -25,8 +24,7 @@ namespace YOTS
 
     public override string DisplayName => "YOTS Animator Generator";
 
-    protected override void Configure()
-    {
+    protected override void Configure() {
       // First pass: Retrieve and stash configuration
       InPhase(BuildPhase.Resolving)
         .Run("Cache YOTS Config", ctx => {
@@ -82,8 +80,7 @@ namespace YOTS
           RuntimeAnimatorController originalAnimator = descriptor.baseAnimationLayers[4].animatorController;
           var menu = descriptor.expressionsMenu;
           var parameters = descriptor.expressionParameters;
-          if (parameters == null || menu == null)
-          {
+          if (parameters == null || menu == null) {
             ErrorReport.WithContextObject(descriptor, () => {
                 ErrorReport.ReportException(
                     new Exception("Missing required VRC assets"), 
@@ -115,8 +112,7 @@ namespace YOTS
           }
 
           // If no original animator, just assign the generated one.
-          if (originalAnimator == null)
-          {
+          if (originalAnimator == null) {
             descriptor.baseAnimationLayers[4].animatorController = generatedAnimator;
             return;
           }
@@ -129,14 +125,11 @@ namespace YOTS
     }
 
     // Simply append generated params and layers to the original animator.
-    private static void MergeAnimatorControllers(Localizer localizer, AnimatorController original, AnimatorController generated)
-    {
+    private static void MergeAnimatorControllers(Localizer localizer, AnimatorController original, AnimatorController generated) {
       // Merge parameters from generated into original.
-      foreach (var genParam in generated.parameters)
-      {
+      foreach (var genParam in generated.parameters) {
         // This is an O(m*n) check but m and n should be small enough to not matter.
-        if (original.parameters.Any(p => p.name == genParam.name))
-        {
+        if (original.parameters.Any(p => p.name == genParam.name)) {
           ErrorReport.WithContextObject(original, () => {
               ErrorReport.ReportException(
                   new Exception($"Parameter '{genParam.name}' already exists"), 
@@ -149,12 +142,10 @@ namespace YOTS
       }
 
       // Append each YOTS layer after the original layers.
-      foreach (var genLayer in generated.layers)
-      {
+      foreach (var genLayer in generated.layers) {
         // This isn't strictly an error but if someone already has layers named
         // YOTS_* that's probably not on purpose.
-        if (original.layers.Any(l => l.name == genLayer.name))
-        {
+        if (original.layers.Any(l => l.name == genLayer.name)) {
           ErrorReport.WithContextObject(original, () => {
               ErrorReport.ReportException(
                   new Exception($"Layer '{genLayer.name}' already exists"), 
@@ -163,8 +154,7 @@ namespace YOTS
           });
           return;
         }
-        var newLayer = new AnimatorControllerLayer
-        {
+        var newLayer = new AnimatorControllerLayer {
           name = genLayer.name,
           defaultWeight = genLayer.defaultWeight,
           stateMachine = genLayer.stateMachine
@@ -173,8 +163,7 @@ namespace YOTS
       }
     }
 
-    private class YOTSBuildState
-    {
+    private class YOTSBuildState {
       public string jsonConfig;
     }
   }
