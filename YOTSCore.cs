@@ -277,23 +277,25 @@ namespace YOTS
         private static AnimatorController GenerateAnimatorController(GeneratedAnimatorConfig animatorConfig)
         {
             AnimatorController controller = new AnimatorController();
-
             // Add weight parameter used to ensure that the blendtrees always
             // run. All layers use this. Documented on vrc.school:
             //   http://vrc.school/docs/Other/DBT-Combining#ed504c95853f4924adeffb6b125234ad
+            List<AnimatorControllerParameter> parameters_list = new List<AnimatorControllerParameter>();
             var yots_weight = new AnimatorControllerParameter();
             yots_weight.name = "YOTS_Weight";
             yots_weight.type = AnimatorControllerParameterType.Float;
             yots_weight.defaultFloat = 1.0f;
-            controller.parameters = controller.parameters.Append(yots_weight).ToArray();
+            parameters_list.Add(yots_weight);
             // Add all other parameters
             foreach (var param in animatorConfig.parameters)
             {
-                if (!controller.parameters.Any(p => p.name == param))
-                {
-                    controller.AddParameter(param, AnimatorControllerParameterType.Float);
-                }
+                var p = new AnimatorControllerParameter();
+                p.name = param;
+                p.type = AnimatorControllerParameterType.Float;
+                p.defaultFloat = 0.0f;  // TODO set this according to user's preference
+                parameters_list.Add(p);
             }
+            controller.parameters = parameters_list.ToArray();
 
             // Add base layer
             var baseLayer = animatorConfig.layers[0];
@@ -953,7 +955,7 @@ namespace YOTS
                 {
                     name = toggle.name,
                     valueType = toggle.type == "radial" ? VRCExpressionParameters.ValueType.Float : VRCExpressionParameters.ValueType.Bool,
-                    defaultValue = 0f,
+                    defaultValue = 1f,
                     saved = true
                 });
             }
