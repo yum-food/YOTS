@@ -58,16 +58,6 @@ namespace YOTS
     }
 
     public ToggleSpec() {}
-
-    public IEnumerable<string> GetAffectedAttributes() {
-      foreach (var mesh in meshToggles) {
-        yield return $"MeshToggle:{mesh}";
-      }
-
-      foreach (var blend in blendShapes) {
-        yield return $"BlendShape:{blend.path}/{blend.blendShape}";
-      }
-    }
   }
 
   [System.Serializable]
@@ -187,6 +177,14 @@ namespace YOTS
 
   public class YOTSCore {
     private static Dictionary<string, AnimationClip> animationClips = new Dictionary<string, AnimationClip>();
+
+    private static string GetMeshToggleAttributeId(string path) {
+      return "MeshToggle:" + path;
+    }
+
+    private static string GetBlendShapeAttributeId(string path, string blendShape) {
+      return "BlendShape:" + path + "/" + blendShape;
+    }
 
     public static AnimatorController GenerateAnimator(string configJson,
         VRCExpressionParameters vrcParams, VRCExpressionsMenu vrcMenu) {
@@ -447,7 +445,6 @@ namespace YOTS
         var depthGroup = togglesByDepth[i];
         AnimatorLayer layer = new AnimatorLayer();
         layer.name = i == 0 ? "YOTS_BaseLayer" : $"YOTS_OverrideLayer{(i - 1).ToString("00")}";
-
         foreach (var toggle in depthGroup) {
           string paramName = toggle.name;
           if (!genAnimatorConfig.parameters.Any(p => p.name == paramName))
@@ -466,7 +463,6 @@ namespace YOTS
               parameter = paramName
               });
         }
-
         genAnimatorConfig.layers.Add(layer);
       }
       // Add animations
@@ -518,6 +514,8 @@ namespace YOTS
     }
 
     private static GeneratedAnimatorConfig ApplyIndependentFixToAnimatorConfig(GeneratedAnimatorConfig genAnimatorConfig) {
+      // TODO meshToggles do not implement offValue/onValue at the JSON level,
+      // so this is redundant.
       float GetOffValueForMesh(string path, List<GeneratedMeshToggle> offList) {
         var offToggle = offList?.FirstOrDefault(mt => mt.path == path);
         return offToggle != null ? offToggle.value : 0.0f;
@@ -528,9 +526,9 @@ namespace YOTS
         return offBlend != null ? offBlend.value : 0.0f;
       }
 
+      // Create mapping from toggle name -> (on animation, off animation)
       Dictionary<string, (GeneratedAnimationClipConfig on, GeneratedAnimationClipConfig off)> toggleAnimations =
         new Dictionary<string, (GeneratedAnimationClipConfig, GeneratedAnimationClipConfig)>();
-
       foreach (var anim in genAnimatorConfig.animations) {
         if (anim.name.EndsWith("_On")) {
           string toggleName = anim.name.Substring(0, anim.name.LastIndexOf("_On"));
@@ -557,19 +555,16 @@ namespace YOTS
           string entryName = entry.name;
           string toggleName = entryName;
           if (toggleName.EndsWith("_On"))
-            toggleName = toggleName.Substring(0, toggleName.LastIndexOf("_On"));
+            toggleName = toggleName.Substring(0, toggleName.Length - "_On".Length);
           else if (toggleName.EndsWith("_Off"))
-            toggleName = toggleName.Substring(0, toggleName.LastIndexOf("_Off"));
-          else if (toggleName.Contains("_Independent"))
-            toggleName = toggleName.Replace("_Independent", "");
-          else if (toggleName.Contains("_Dependent"))
-            toggleName = toggleName.Replace("_Dependent", "");
-
+            toggleName = toggleName.Substring(0, toggleName.Length - "_Off".Length);
           if (!toggleToLayerIndex.ContainsKey(toggleName))
             toggleToLayerIndex[toggleName] = i;
         }
       }
 
+      // Mapping from attribute touched by animation to the set of toggles
+      // which affect it.
       Dictionary<string, HashSet<string>> attributeToToggles = new Dictionary<string, HashSet<string>>();
       foreach (var kvp in toggleAnimations) {
         string toggleName = kvp.Key;
@@ -579,17 +574,16 @@ namespace YOTS
         HashSet<string> attributes = new HashSet<string>();
         if (pair.on.meshToggles != null) {
           foreach (var mt in pair.on.meshToggles) {
-            string attr = "MeshToggle:" + mt.path;
+            string attr = GetMeshToggleAttributeId(mt.path);
             attributes.Add(attr);
           }
         }
         if (pair.on.blendShapes != null) {
           foreach (var bs in pair.on.blendShapes) {
-            string attr = "BlendShape:" + bs.path + "/" + bs.blendShape;
+            string attr = GetBlendShapeAttributeId(bs.path, bs.blendShape);
             attributes.Add(attr);
           }
         }
-
         foreach (var attr in attributes) {
           if (!attributeToToggles.TryGetValue(attr, out var set)) {
             set = new HashSet<string>();
@@ -598,6 +592,9 @@ namespace YOTS
           set.Add(toggleName);
         }
       }
+
+      // TODO assert that all toggles affecting the same attribute are on
+      // different layers.
 
       List<GeneratedAnimationClipConfig> newAnimations = new List<GeneratedAnimationClipConfig>();
 
@@ -608,157 +605,158 @@ namespace YOTS
       foreach (var kvp in toggleAnimations) {
         string toggleName = kvp.Key;
         var pair = kvp.Value;
-        int layerIndex = toggleToLayerIndex.ContainsKey(toggleName) ? toggleToLayerIndex[toggleName] : 0;
-        bool isBase = (layerIndex == 0);
+        int layerIndex = toggleToLayerIndex[toggleName];
 
-        if (isBase) {
+        if (layerIndex == 0) {
           newAnimations.Add(pair.on);
           newAnimations.Add(pair.off);
+          continue;
         }
-        else {
-          List<GeneratedMeshToggle> independentMesh = new List<GeneratedMeshToggle>();
-          List<GeneratedMeshToggle> dependentMesh = new List<GeneratedMeshToggle>();
 
-          if (pair.on.meshToggles != null) {
-            foreach (var mt in pair.on.meshToggles) {
-              string attr = "MeshToggle:" + mt.path;
-              if (attributeToToggles[attr].Count == 1)
-                independentMesh.Add(mt);
-              else
-                dependentMesh.Add(mt);
+        // Work out which of the animation's mesh toggles are overrides and
+        // which are independent.
+        List<GeneratedMeshToggle> independentMesh = new List<GeneratedMeshToggle>();
+        List<GeneratedMeshToggle> dependentMesh = new List<GeneratedMeshToggle>();
+        if (pair.on.meshToggles != null) {
+          foreach (var mt in pair.on.meshToggles) {
+            string attr = GetMeshToggleAttributeId(mt.path);
+            if (attributeToToggles[attr].Count == 1)
+              independentMesh.Add(mt);
+            else
+              dependentMesh.Add(mt);
+          }
+        }
+
+        // Work out which of the animation's blendshapes are overrides and
+        // which are independent.
+        List<GeneratedBlendShape> independentBlend = new List<GeneratedBlendShape>();
+        List<GeneratedBlendShape> dependentBlend = new List<GeneratedBlendShape>();
+        if (pair.on.blendShapes != null) {
+          foreach (var bs in pair.on.blendShapes) {
+            string attr = GetBlendShapeAttributeId(bs.path, bs.blendShape);
+            if (attributeToToggles[attr].Count == 1)
+              independentBlend.Add(bs);
+            else
+              dependentBlend.Add(bs);
+          }
+        }
+
+        bool hasIndependent = (independentMesh.Count > 0 || independentBlend.Count > 0);
+        bool hasDependent = (dependentMesh.Count > 0 || dependentBlend.Count > 0);
+
+        if (hasIndependent && hasDependent) {
+          GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
+          dependentOn.name = toggleName + "_Dependent_On";
+          dependentOn.meshToggles = dependentMesh;
+          dependentOn.blendShapes = dependentBlend;
+
+          GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
+          dependentOff.name = toggleName + "_Dependent_Off";
+          dependentOff.meshToggles = dependentMesh
+            .Select(mt => new GeneratedMeshToggle{
+                path = mt.path,
+                value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
+                })
+          .ToList();
+          dependentOff.blendShapes = dependentBlend
+            .Select(bs => new GeneratedBlendShape{
+                path = bs.path,
+                blendShape = bs.blendShape,
+                value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
+                })
+          .ToList();
+
+          GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
+          independentOn.name = toggleName + "_Independent_On";
+          independentOn.meshToggles = independentMesh;
+          independentOn.blendShapes = independentBlend;
+
+          GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
+          independentOff.name = toggleName + "_Independent_Off";
+          independentOff.meshToggles = independentMesh
+            .Select(mt => new GeneratedMeshToggle{
+                path = mt.path,
+                value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
+                })
+          .ToList();
+          independentOff.blendShapes = independentBlend
+            .Select(bs => new GeneratedBlendShape{
+                path = bs.path,
+                blendShape = bs.blendShape,
+                value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
+                })
+          .ToList();
+
+          newAnimations.Add(dependentOn);
+          newAnimations.Add(dependentOff);
+          newAnimations.Add(independentOn);
+          newAnimations.Add(independentOff);
+
+          AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
+          foreach (var entry in overrideLayer.directBlendTree.entries) {
+            if (entry.name.StartsWith(toggleName) &&
+                (entry.name.EndsWith("_On") || entry.name.EndsWith("_Off"))) {
+              entry.name = entry.name.EndsWith("_On") ? toggleName + "_Dependent_On" : toggleName + "_Dependent_Off";
             }
           }
 
-          List<GeneratedBlendShape> independentBlend = new List<GeneratedBlendShape>();
-          List<GeneratedBlendShape> dependentBlend = new List<GeneratedBlendShape>();
+          if (baseLayer != null) {
+            baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
+                name = toggleName + "_Independent_On",
+                parameter = toggleName
+                });
+            baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
+                name = toggleName + "_Independent_Off",
+                parameter = toggleName
+                });
+          }
+        } else if (hasIndependent) {
+          GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
+          independentOn.name = toggleName + "_Independent_On";
+          independentOn.meshToggles = pair.on.meshToggles;
+          independentOn.blendShapes = pair.on.blendShapes;
+          GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
+          independentOff.name = toggleName + "_Independent_Off";
+          independentOff.meshToggles = pair.off.meshToggles;
+          independentOff.blendShapes = pair.off.blendShapes;
 
-          if (pair.on.blendShapes != null) {
-            foreach (var bs in pair.on.blendShapes) {
-              string attr = "BlendShape:" + bs.path + "/" + bs.blendShape;
-              if (attributeToToggles[attr].Count == 1)
-                independentBlend.Add(bs);
-              else
-                dependentBlend.Add(bs);
+          newAnimations.Add(independentOn);
+          newAnimations.Add(independentOff);
+
+          AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
+          overrideLayer.directBlendTree.entries.RemoveAll(e => e.name.StartsWith(toggleName));
+          if (baseLayer != null) {
+            baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
+                name = toggleName + "_Independent_On",
+                parameter = toggleName
+                });
+            baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
+                name = toggleName + "_Independent_Off",
+                parameter = toggleName
+                });
+          }
+        } else if (hasDependent) {
+          GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
+          dependentOn.name = toggleName + "_Dependent_On";
+          dependentOn.meshToggles = pair.on.meshToggles;
+          dependentOn.blendShapes = pair.on.blendShapes;
+          GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
+          dependentOff.name = toggleName + "_Dependent_Off";
+          dependentOff.meshToggles = pair.off.meshToggles;
+          dependentOff.blendShapes = pair.off.blendShapes;
+
+          newAnimations.Add(dependentOn);
+          newAnimations.Add(dependentOff);
+
+          AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
+          foreach (var entry in overrideLayer.directBlendTree.entries) {
+            if (entry.name.StartsWith(toggleName) &&
+                (entry.name.EndsWith("_On") || entry.name.EndsWith("_Off"))) {
+              entry.name = entry.name.EndsWith("_On") ? toggleName + "_Dependent_On" : toggleName + "_Dependent_Off";
             }
           }
-
-          bool hasIndependent = (independentMesh.Count > 0 || independentBlend.Count > 0);
-          bool hasDependent = (dependentMesh.Count > 0 || dependentBlend.Count > 0);
-
-          if (hasIndependent && hasDependent) {
-            GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
-            dependentOn.name = toggleName + "_Dependent_On";
-            dependentOn.meshToggles = dependentMesh;
-            dependentOn.blendShapes = dependentBlend;
-
-            GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
-            dependentOff.name = toggleName + "_Dependent_Off";
-            dependentOff.meshToggles = dependentMesh
-              .Select(mt => new GeneratedMeshToggle{
-                  path = mt.path,
-                  value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
-                  })
-            .ToList();
-            dependentOff.blendShapes = dependentBlend
-              .Select(bs => new GeneratedBlendShape{
-                  path = bs.path,
-                  blendShape = bs.blendShape,
-                  value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
-                  })
-            .ToList();
-
-            GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
-            independentOn.name = toggleName + "_Independent_On";
-            independentOn.meshToggles = independentMesh;
-            independentOn.blendShapes = independentBlend;
-
-            GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
-            independentOff.name = toggleName + "_Independent_Off";
-            independentOff.meshToggles = independentMesh
-              .Select(mt => new GeneratedMeshToggle{
-                  path = mt.path,
-                  value = GetOffValueForMesh(mt.path, pair.off.meshToggles)
-                  })
-            .ToList();
-            independentOff.blendShapes = independentBlend
-              .Select(bs => new GeneratedBlendShape{
-                  path = bs.path,
-                  blendShape = bs.blendShape,
-                  value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
-                  })
-            .ToList();
-
-            newAnimations.Add(dependentOn);
-            newAnimations.Add(dependentOff);
-            newAnimations.Add(independentOn);
-            newAnimations.Add(independentOff);
-
-            AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
-            foreach (var entry in overrideLayer.directBlendTree.entries) {
-              if (entry.name.StartsWith(toggleName) &&
-                  (entry.name.EndsWith("_On") || entry.name.EndsWith("_Off"))) {
-                entry.name = entry.name.EndsWith("_On") ? toggleName + "_Dependent_On" : toggleName + "_Dependent_Off";
-              }
-            }
-
-            if (baseLayer != null) {
-              baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                  name = toggleName + "_Independent_On",
-                  parameter = toggleName
-                  });
-              baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                  name = toggleName + "_Independent_Off",
-                  parameter = toggleName
-                  });
-            }
-          }
-          else if (hasIndependent && !hasDependent) {
-            GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
-            independentOn.name = toggleName + "_Independent_On";
-            independentOn.meshToggles = pair.on.meshToggles;
-            independentOn.blendShapes = pair.on.blendShapes;
-            GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
-            independentOff.name = toggleName + "_Independent_Off";
-            independentOff.meshToggles = pair.off.meshToggles;
-            independentOff.blendShapes = pair.off.blendShapes;
-
-            newAnimations.Add(independentOn);
-            newAnimations.Add(independentOff);
-
-            AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
-            overrideLayer.directBlendTree.entries.RemoveAll(e => e.name.StartsWith(toggleName));
-            if (baseLayer != null) {
-              baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                  name = toggleName + "_Independent_On",
-                  parameter = toggleName
-                  });
-              baseLayer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-                  name = toggleName + "_Independent_Off",
-                  parameter = toggleName
-                  });
-            }
-          }
-          else if (!hasIndependent && hasDependent) {
-            GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
-            dependentOn.name = toggleName + "_Dependent_On";
-            dependentOn.meshToggles = pair.on.meshToggles;
-            dependentOn.blendShapes = pair.on.blendShapes;
-            GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
-            dependentOff.name = toggleName + "_Dependent_Off";
-            dependentOff.meshToggles = pair.off.meshToggles;
-            dependentOff.blendShapes = pair.off.blendShapes;
-
-            newAnimations.Add(dependentOn);
-            newAnimations.Add(dependentOff);
-
-            AnimatorLayer overrideLayer = genAnimatorConfig.layers[layerIndex];
-            foreach (var entry in overrideLayer.directBlendTree.entries) {
-              if (entry.name.StartsWith(toggleName) &&
-                  (entry.name.EndsWith("_On") || entry.name.EndsWith("_Off"))) {
-                entry.name = entry.name.EndsWith("_On") ? toggleName + "_Dependent_On" : toggleName + "_Dependent_Off";
-              }
-            }
-          }
+        } else {
+          throw new ArgumentException($"Toggle {toggleName} seems to have no animations.");
         }
       }
 
