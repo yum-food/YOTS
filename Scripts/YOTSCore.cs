@@ -53,6 +53,14 @@ namespace YOTS
     [SerializeField]
     public float defaultValue = 1.0f;
 
+    // Whether the corresponding VRChat parameter is synced.
+    [SerializeField]
+    public bool synced = true;
+
+    // Whether the corresponding VRChat parameter is saved.
+    [SerializeField]
+    public bool saved = true;
+
     public ToggleSpec(string name) {
       this.name = name;
     }
@@ -832,7 +840,8 @@ namespace YOTS
           name = toggle.name,
           valueType = toggle.type == "radial" ? VRCExpressionParameters.ValueType.Float : VRCExpressionParameters.ValueType.Bool,
           defaultValue = toggle.defaultValue,
-          saved = true
+          saved = toggle.saved,
+          networkSynced = toggle.synced
         });
       }
       vrcParams.parameters = paramList.ToArray();
@@ -843,15 +852,15 @@ namespace YOTS
       yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
       foreach (var toggle in toggleSpecs) {
         VRCExpressionsMenu currentMenu = yotsSubmenu;
+        // Recursively create menus until we wind up at the leaf.
         if (!string.IsNullOrEmpty(toggle.menuPath) && toggle.menuPath != "/") {
           string trimmedPath = toggle.menuPath.Trim('/');
           var sections = trimmedPath.Split('/');
           foreach (var section in sections) {
             currentMenu = GetOrCreateSubmenu(currentMenu, section);
-            modifiedMenus.Add(currentMenu);
           }
         }
-        // Add toggle controls
+        // Add toggle.
         if (toggle.type == "radial") {
           currentMenu.controls.Add(new VRCExpressionsMenu.Control{
             name = toggle.name,
@@ -870,7 +879,7 @@ namespace YOTS
         }
       }
 
-      // Add YOTS submenu to main menu
+      // Add YOTS submenu to main menu.
       vrcMenu.controls.Add(new VRCExpressionsMenu.Control{
         name = "YOTS",
         type = VRCExpressionsMenu.Control.ControlType.SubMenu,

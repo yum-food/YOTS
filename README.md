@@ -60,6 +60,19 @@ Toggle options are documented in two places:
    truth.
 2. The [Examples](./Examples).
 
+## Technical details
+
+* Toggles are created as boolean parameters.
+* Radial puppets (sliders) are created as float parameters.
+* By default, all parameters are synced and saved. These can both be
+  overridden.
+* The generated VRChat parameter and animator parameters use the "name" field.
+  No namespacing is applied.
+* The generated animator has exactly as many layers as the maximum length of
+  any dependency chain in your dependency graph.
+* The generated animator's parameters and layers are simply appended to your
+  input animator.
+
 ## Motivation
 
 Animators have a two fundamental problems:
