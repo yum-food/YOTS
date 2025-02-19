@@ -47,7 +47,7 @@ namespace YOTS
     [SerializeField]
     public string menuPath = "/";
 
-    // The default value of the toggle.
+    // The default value of the toggle. Range from 0-1.
     // For example, if you want a gimmick to start toggled off, set this to
     // 0.0f.
     [SerializeField]
@@ -60,12 +60,6 @@ namespace YOTS
     // Whether the corresponding VRChat parameter is saved.
     [SerializeField]
     public bool saved = true;
-
-    public ToggleSpec(string name) {
-      this.name = name;
-    }
-
-    public ToggleSpec() {}
   }
 
   [System.Serializable]
@@ -87,15 +81,6 @@ namespace YOTS
     // The value of the blendshape when the toggle is on. Range from 0-100.
     [SerializeField]
     public float onValue = 100.0f;
-
-    public BlendShapeSpec(string path, string blendShape, float offValue = 0, float onValue = 100) {
-      this.path = path;
-      this.blendShape = blendShape;
-      this.offValue = offValue;
-      this.onValue = onValue;
-    }
-
-    public BlendShapeSpec() {}
   }
 
   [System.Serializable]
