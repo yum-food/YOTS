@@ -30,6 +30,9 @@ namespace YOTS
         [SerializeField]
         public string menuPath = "/";
 
+        [SerializeField]
+        public float defaultValue = 1.0f;
+
         public ToggleSpec(string name)
         {
             this.name = name;
@@ -123,7 +126,7 @@ namespace YOTS
     [System.Serializable]
     public class GeneratedAnimatorConfig
     {
-        public List<string> parameters = new List<string>();
+        public List<AnimatorParameterSetting> parameters = new List<AnimatorParameterSetting>();
         public List<AnimatorLayer> layers = new List<AnimatorLayer>();
         public List<GeneratedAnimationClipConfig> animations =
             new List<GeneratedAnimationClipConfig>();
@@ -165,6 +168,13 @@ namespace YOTS
         public string name;
         public string parameter;
         public Texture2D icon;
+    }
+
+    [System.Serializable]
+    public class AnimatorParameterSetting
+    {
+        public string name;
+        public float defaultValue;
     }
 
     public class YOTSCore
@@ -290,9 +300,9 @@ namespace YOTS
             foreach (var param in animatorConfig.parameters)
             {
                 var p = new AnimatorControllerParameter();
-                p.name = param;
+                p.name = param.name;
                 p.type = AnimatorControllerParameterType.Float;
-                p.defaultFloat = 0.0f;  // TODO set this according to user's preference
+                p.defaultFloat = param.defaultValue;
                 parameters_list.Add(p);
             }
             controller.parameters = parameters_list.ToArray();
@@ -490,13 +500,17 @@ namespace YOTS
             {
                 var depthGroup = togglesByDepth[i];
                 AnimatorLayer layer = new AnimatorLayer();
-                layer.name = i == 0 ? "BaseLayer" : $"OverrideLayer{(i-1).ToString("00")}";
+                layer.name = i == 0 ? "BaseLayer" : $"OverrideLayer{(i - 1).ToString("00")}";
                 
                 foreach (var toggle in depthGroup)
                 {
                     string paramName = toggle.name;
-                    if (!genAnimatorConfig.parameters.Contains(paramName))
-                        genAnimatorConfig.parameters.Add(paramName);
+                    if (!genAnimatorConfig.parameters.Any(p => p.name == paramName))
+                        genAnimatorConfig.parameters.Add(new AnimatorParameterSetting 
+                        { 
+                            name = paramName, 
+                            defaultValue = toggle.defaultValue 
+                        });
 
                     layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry {
                         name = toggle.name + "_On",
@@ -955,7 +969,7 @@ namespace YOTS
                 {
                     name = toggle.name,
                     valueType = toggle.type == "radial" ? VRCExpressionParameters.ValueType.Float : VRCExpressionParameters.ValueType.Bool,
-                    defaultValue = 1f,
+                    defaultValue = toggle.defaultValue,
                     saved = true
                 });
             }
