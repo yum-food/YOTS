@@ -1,22 +1,23 @@
 # YOTS: yum's optimized toggle system
 
-YOTS is a text-based system for creating and managing VRChat toggles. It solves
-two core problems:
+YOTS is a text-based system for managing VRChat toggles and sliders. It
+translates a single config file into VRChat menus, parameters, animations, and
+animator layers. They are added to your avatar non-destructively.
 
-1. Toggles must be flattened into as few layers as possible using direct blend
-   trees (DBTs).
-2. Toggles may have dependencies which prevent them from being combined.
-
-The core idea is to use declared dependencies between toggles to perform a
-topological sort, then flatten each layer of the sort into a single DBT.
+YOTS is efficient, maintainable, non-destructive, and compatible with any
+existing animator.
 
 yum!
 
-## Real world example
+## Installation
 
-Here's a fairly simple animator I made for an avatar I'm working on. You would
-write and maintain this config file. YOTS uses it to generate the menus,
-parameters, and animator. You hook those into your avatar and upload.
+First, install [Modular Avatar](https://modular-avatar.nadena.dev/).
+
+Then grab the latest release from [the releases page](https://github.com/yum-food/YOTS/releases/latest).
+
+## Creating your first toggle
+
+Open your text editor of choice and paste this in:
 
 ```json
 {
@@ -24,83 +25,80 @@ parameters, and animator. You hook those into your avatar and upload.
   "toggles": [
     {
       "name": "Shirt",
-      "menuPath": "/Clothes",
-      "dependencies": ["Bra"],
       "meshToggles": ["Shirt"],
-      "blendShapes": [
-        {
-          "path": "Body",
-          "blendShape": "Bra on"
-        },
-        {
-          "path": "Body",
-          "blendShape": "Smush nips"
-        },
-        {
-          "path": "Skirt",
-          "blendShape": "Shirt off",
-          "offValue": 100.0,
-          "onValue": 0.0
-        }
-      ]
-    },
-    {
-      "name": "Skirt",
-      "menuPath": "/Clothes",
-      "meshToggles": ["Skirt"],
-      "blendShapes": []
-    },
-    {
-      "name": "Socks",
-      "menuPath": "/Clothes",
-      "meshToggles": ["Socks"],
-      "blendShapes": [
-        {
-          "path": "Body",
-          "blendShape": "Thigh squish"
-        }
-      ]
-    },
-    {
-      "name": "Shoes",
-      "menuPath": "/Clothes",
-      "meshToggles": ["Shoes"],
-      "blendShapes": []
-    },
-
-    {
-      "name": "Bra",
-      "menuPath": "/NSFW",
-      "meshToggles": ["Bra"],
-      "blendShapes": [
-        {
-          "path": "Body",
-          "blendShape": "Bra on"
-        },
-        {
-          "path": "Body",
-          "blendShape": "Smush nips"
-        }
-      ]
-    },
-    {
-      "name": "Panties",
-      "menuPath": "/NSFW",
-      "meshToggles": ["Panties"],
-      "blendShapes": []
-    },
-
-    {
-      "name": "Hair",
-      "menuPath": "/Misc",
-      "meshToggles": ["Hair"],
       "blendShapes": []
     }
   ]
 }
 ```
 
-## Design overview by example
+Feel free to replace "Shirt" with the name of some other mesh on your avatar.
+
+Save it to Assets/animator.json.
+
+Drag Assets/yum\_food/YOTS.prefab anywhere on your avatar. Select it in the
+hierarchy, and drag Assets/animator.json onto the "JSON config" field.
+
+Enter play mode. Enable an emulator (I use Lyuma's av3emulator). Open your
+menu. You should see a YOTS submenu. Click it, then click Shirt. Your shirt
+should toggle off.
+
+Congratulations!
+
+A logical sequence of things to try:
+
+1. Add more toggles.
+2. Add blendshape toggles in addition to mesh toggles.
+3. Declare a dependency on another toggle with `"dependencies": ["someOtherToggle"]`.
+4. Install a toggle at a custom path with `"menuPath": "/my/custom/path"`.
+5. Add a radial puppet with `"type": "radial"`.
+
+Toggle options are documented in two places:
+
+1. Read the ToggleSpec definition at the top of
+   [YOTSCore.cs](./Scripts/YOTSCore.cs). This is the definitive source of
+   truth.
+2. Skim the examples under Examples/
+
+## Motivation
+
+Animators have a two fundamental problems:
+
+1. Layers are extremely slow. Their runtime scales with O(n^2).
+2. Animations which affect the same thing cannot be in the same layer.
+
+Any efficient animator must minimize the number of layers. Any real-world
+animator requires multiple layers because some toggles will need to override
+other toggles. Thus the goal is to provide this overriding capability while
+still minimizing the number of layers.
+
+In addition, whenever you add a toggle to a VRChat avatar, you need to edit at
+least 4 files:
+
+1. An animation file for the toggle (usually two)
+2. The avatar menu
+3. The avatar parameters
+4. The animator
+
+With YOTS, you only have to edit one file.
+
+Finally, there are many unduly tedious tasks which you wind up performing over
+the lifetime of an avatar:
+
+1. Adding new articles of clothing. You now have to edit all your existing
+   avatar-wide animations to include them.
+2. Adding new kinds of toggles or sliders. You may want them to affect a large
+   set of items. For example: you added a minimum brightness slider, and now
+   have to animate 20 different articles of clothing.
+3. Removing articles of clothing. You should remove them from your avatar-wide
+   animations. (No one does this because it's a pain in the ass!)
+4. Removing toggles or sliders. It's easy to accidentally orphan an animator
+   layer, or a parameter somewhere.
+
+These are all vastly easier to perform through a textual configuration system
+than through VRChat's native GUI approach.
+
+## Design derivation
 
 Consider this basic example: you have a shirt and a jacket. The shirt hides the
 chest to avoid clipping. The jacket hides the shirt sleeves to hide clipping:
@@ -217,7 +215,7 @@ independent part may be comprised of the empty set, in which case it is
 discarded. If it's not empty, it's added to the first layer's DBT. The
 dependent part is guaranteed to be non-empty, and is simply added to a new DBT.
 
-## Specification language
+### Specification language
 
 We use JSON to represent the specification. The example above is expressed as
 follows:
@@ -465,13 +463,14 @@ Extension 2.
 
 Our animations are complete. Our animator can trivially use the names of each
 ToggleSpec as its parameters. To actually generate the first layer, we'll use
-Hai's Animator As Code.
+Unity's built in APIs.
 
-// TODO document this part. For now just look at AnimatorGenerator.cs.
+// TODO document this part. For now just look at YOTSCore.cs.
 
 We have to generate animations, configs for debug purposes, and finally an
 animator file.
 
+// TODO document this. Again just look at YOTSCore.cs.
 
 ## Extensions
 
