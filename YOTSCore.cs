@@ -123,7 +123,6 @@ namespace YOTS
     [System.Serializable]
     public class GeneratedAnimatorConfig
     {
-        public string name;
         public List<string> parameters = new List<string>();
         public List<AnimatorLayer> layers = new List<AnimatorLayer>();
         public List<GeneratedAnimationClipConfig> animations =
@@ -172,15 +171,15 @@ namespace YOTS
     {
         public static AnimatorController GenerateAnimator(
             string configJson,
-            VRCExpressionParameters existingParams,
-            VRCExpressionsMenu mainMenu
+            VRCExpressionParameters vrcParams,
+            VRCExpressionsMenu vrcMenu
         )
         {
             Debug.Log("=== Starting Animator Generation Process ===");
 
             if (string.IsNullOrEmpty(configJson))
             {
-                Debug.LogError("No JSON content provided. Process aborted.");
+                Debug.LogError("No config JSON provided.");
                 return null;
             }
             Debug.Log("Parsing JSON configuration");
@@ -197,7 +196,7 @@ namespace YOTS
             }
             if (config == null) 
             {
-                Debug.LogError("Configuration file is empty or invalid");
+                Debug.LogError("JSON config is empty or invalid");
                 return null;
             }
             
@@ -208,15 +207,13 @@ namespace YOTS
             }
             Debug.Log($"Configuration loaded. Found {config.toggles.Count} toggles.");
 
-            // First we generate a naive animator config.
             GeneratedAnimatorConfig genAnimatorConfig = GenerateNaiveAnimatorConfig(config.toggles);
-            // Apply further fixes
             genAnimatorConfig = ApplyIndependentFixToAnimatorConfig(genAnimatorConfig);
             genAnimatorConfig = RemoveOffAnimationsFromOverrideLayers(genAnimatorConfig);
             genAnimatorConfig = RemoveUnusedAnimations(genAnimatorConfig);
 
             // Generate VRChat parameters and menu
-            GenerateVRChatAssets(config.toggles, existingParams, mainMenu);
+            GenerateVRChatAssets(config.toggles, vrcParams, vrcMenu);
 
             // Create the animation clips directly from the animator config
             // TODO animations should not be persisted to disk unless requested for debuggability
@@ -281,9 +278,15 @@ namespace YOTS
         {
             AnimatorController controller = new AnimatorController();
 
-            controller.AddParameter("YOTS_Weight", AnimatorControllerParameterType.Float);
-            controller.parameters[0].defaultFloat = 1.0f;
-
+            // Add weight parameter used to ensure that the blendtrees always
+            // run. All layers use this. Documented on vrc.school:
+            //   http://vrc.school/docs/Other/DBT-Combining#ed504c95853f4924adeffb6b125234ad
+            var yots_weight = new AnimatorControllerParameter();
+            yots_weight.name = "YOTS_Weight";
+            yots_weight.type = AnimatorControllerParameterType.Float;
+            yots_weight.defaultFloat = 1.0f;
+            controller.parameters = controller.parameters.Append(yots_weight).ToArray();
+            // Add all other parameters
             foreach (var param in animatorConfig.parameters)
             {
                 if (!controller.parameters.Any(p => p.name == param))
@@ -292,7 +295,7 @@ namespace YOTS
                 }
             }
 
-            // Process base layer first
+            // Add base layer
             var baseLayer = animatorConfig.layers[0];
             var baseStateMachine = new AnimatorStateMachine();
             baseStateMachine.name = "BaseLayer_SM";
@@ -356,7 +359,7 @@ namespace YOTS
                 stateMachine = baseStateMachine
             });
 
-            // Process override layers (if any)
+            // Add override layers
             for (int i = 1; i < animatorConfig.layers.Count; i++)
             {
                 var layerConfig = animatorConfig.layers[i];
@@ -474,17 +477,13 @@ namespace YOTS
         private static GeneratedAnimatorConfig GenerateNaiveAnimatorConfig(List<ToggleSpec> toggleSpecs)
         {
             GeneratedAnimatorConfig genAnimatorConfig = new GeneratedAnimatorConfig();
-            genAnimatorConfig.name = "YOTS_Animator";
-
-            GeneratedAnimationsConfig animConfig = GenerateAnimationConfig(toggleSpecs);
-            genAnimatorConfig.animations = animConfig.animations;
-
+            // Sort toggles into layers
             Dictionary<string, int> depths = TopologicalSortToggles(toggleSpecs);
             var togglesByDepth = toggleSpecs
                 .GroupBy(t => depths[t.name])
                 .OrderBy(g => g.Key)
                 .ToList();
-
+            // Add layers
             for (int i = 0; i < togglesByDepth.Count; i++)
             {
                 var depthGroup = togglesByDepth[i];
@@ -510,7 +509,9 @@ namespace YOTS
                 
                 genAnimatorConfig.layers.Add(layer);
             }
-
+            // Add animations
+            GeneratedAnimationsConfig animConfig = GenerateAnimationConfig(toggleSpecs);
+            genAnimatorConfig.animations = animConfig.animations;
             return genAnimatorConfig;
         }
 
@@ -855,7 +856,7 @@ namespace YOTS
             for (int i = 1; i < config.layers.Count; i++)
             {
                 var layer = config.layers[i];
-                layer.directBlendTree.entries.RemoveAll(entry =>  entry.name.EndsWith("_Off"));
+                layer.directBlendTree.entries.RemoveAll(entry => entry.name.EndsWith("_Off"));
             }
             return config;
         }
@@ -873,7 +874,6 @@ namespace YOTS
                 .Where(anim => referencedAnimations.Contains(anim.name))
                 .ToList();
 
-            Debug.Log($"Removed {config.animations.Count - referencedAnimations.Count} unused animations");
             return config;
         }
 
@@ -935,8 +935,8 @@ namespace YOTS
 
         private static void GenerateVRChatAssets(
             List<ToggleSpec> toggleSpecs, 
-            VRCExpressionParameters existingParams = null,
-            VRCExpressionsMenu mainMenu = null
+            VRCExpressionParameters vrcParams,
+            VRCExpressionsMenu vrcMenu
         )
         {
             var uniqueToggles = toggleSpecs
@@ -945,17 +945,8 @@ namespace YOTS
                 .Select(g => g.First())
                 .ToList();
 
-            VRCExpressionParameters expressionParameters;
-            if (existingParams == null) {
-                expressionParameters = ScriptableObject.CreateInstance<VRCExpressionParameters>();
-            } else {
-                expressionParameters = existingParams;
-            }
-
             var paramList = new List<VRCExpressionParameters.Parameter>();
-            if (expressionParameters.parameters != null) {
-                paramList.AddRange(expressionParameters.parameters.Where(p => !uniqueToggles.Any(t => t.name == p.name)));
-            }
+            paramList.AddRange(vrcParams.parameters.Where(p => !uniqueToggles.Any(t => t.name == p.name)));
             foreach (var toggle in uniqueToggles)
             {
                 paramList.Add(new VRCExpressionParameters.Parameter
@@ -966,18 +957,14 @@ namespace YOTS
                     saved = true
                 });
             }
-            expressionParameters.parameters = paramList.ToArray();
-
-            mainMenu.controls.RemoveAll(c => c.name == "YOTS");
-
+            vrcParams.parameters = paramList.ToArray();
+            vrcMenu.controls.RemoveAll(c => c.name == "YOTS");
             // Create YOTS submenu
             VRCExpressionsMenu yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
             yotsSubmenu.name = "YOTS";
             yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
-
             // Track all created/modified menus to ensure they're saved
-            HashSet<VRCExpressionsMenu> modifiedMenus = new HashSet<VRCExpressionsMenu> { mainMenu, yotsSubmenu };
-
+            HashSet<VRCExpressionsMenu> modifiedMenus = new HashSet<VRCExpressionsMenu> { vrcMenu, yotsSubmenu };
             foreach (var toggle in toggleSpecs)
             {
                 VRCExpressionsMenu currentMenu = yotsSubmenu;
@@ -991,7 +978,6 @@ namespace YOTS
                         modifiedMenus.Add(currentMenu);
                     }
                 }
-
                 // Add toggle controls
                 if (toggle.type == "radial")
                 {
@@ -1017,7 +1003,7 @@ namespace YOTS
             }
 
             // Add YOTS submenu to main menu
-            mainMenu.controls.Add(new VRCExpressionsMenu.Control
+            vrcMenu.controls.Add(new VRCExpressionsMenu.Control
             {
                 name = "YOTS",
                 type = VRCExpressionsMenu.Control.ControlType.SubMenu,
