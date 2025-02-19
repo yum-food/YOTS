@@ -3,7 +3,6 @@
   "toggles": [
     {
       "name": "Shirt",
-      "menuPath": "/Clothes",
       "meshToggles": ["Shirt"],
       "blendShapes": [
         {
@@ -21,10 +20,6 @@
           "path": "Body",
           "blendShape": "Chest_Hide"
         },
-        {
-          "path": "Shirt",
-          "blendShape": "Chest_Hide"
-        }
       ]
     }
   ]
