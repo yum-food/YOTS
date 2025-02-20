@@ -29,7 +29,13 @@ namespace YOTS
       InPhase(BuildPhase.Resolving)
         .Run("Cache YOTS Config", ctx => {
           var config = ctx.AvatarRootObject.GetComponentInChildren<YOTSNDMFConfig>();
-          if (config == null || config.jsonConfig == null) {
+          if (config == null) {
+            ctx.GetState<YOTSBuildState>().skipGeneration = true;
+            Debug.Log("No YOTS config found - skipping.");
+            return;
+          }
+          if (config.jsonConfig == null) {
+            ctx.GetState<YOTSBuildState>().skipGeneration = true;
             ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
                 ErrorReport.ReportException(
                     new Exception("No YOTS config found"), 
@@ -47,6 +53,9 @@ namespace YOTS
       InPhase(BuildPhase.Transforming)
         .Run("Generate YOTS Animator", ctx => {
           var config = ctx.GetState<YOTSBuildState>();
+          if (config.skipGeneration) {
+            return;
+          }
           if (config == null) {
             ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
                 ErrorReport.ReportException(
@@ -165,6 +174,7 @@ namespace YOTS
 
     private class YOTSBuildState {
       public string jsonConfig;
+      public bool skipGeneration;
     }
 
     private static VRCExpressionsMenu DeepCopyMenu(VRCExpressionsMenu sourceMenu) {

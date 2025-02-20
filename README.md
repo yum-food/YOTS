@@ -25,7 +25,7 @@ Open your text editor of choice and paste this in:
   "toggles": [
     {
       "name": "Shirt",
-      "meshToggles": ["Shirt"],
+      "meshToggles": ["Shirt"]
     }
   ]
 }
