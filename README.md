@@ -515,3 +515,11 @@ should be logged during generation.
 
 There's no reason why we can't make a GUI for generating and modifying the
 config file. This would be appealing to some users.
+
+### 4. Prefab support / modularization
+
+Right now the tool is designed to have one config per avatar. It may be useful
+to have one config per modular system. Moreover, users may wish to "bake" out
+the generated animator/menu/params/animations and distribute those with
+prefabs. Some support for that would be useful.
+
