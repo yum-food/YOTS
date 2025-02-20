@@ -41,6 +41,10 @@ namespace YOTS
     [SerializeField]
     public List<BlendShapeSpec> blendShapes = new List<BlendShapeSpec>();
 
+    // Material properties to animate.
+    [SerializeField]
+    public List<ShaderToggleSpec> shaderToggles = new List<ShaderToggleSpec>();
+
     // Where to put the toggle in the menu. All toggles are placed under
     // /YOTS. So if you put "Clothes" here, it'll be placed under
     // /YOTS/Clothes.
@@ -64,15 +68,15 @@ namespace YOTS
 
   [System.Serializable]
   public class BlendShapeSpec {
-    // The path to the mesh renderer to apply the blend shape to.
-    // For example, "Body" or "Shirt".
-    [SerializeField]
-    public string path;
-
     // The name of the blend shape to apply.
     // For example, "Chest_Hide" or "Boobs+".
     [SerializeField]
     public string blendShape;
+
+    // The path to the mesh renderer to apply the blend shape to.
+    // For example, "Body" or "Shirt".
+    [SerializeField]
+    public string path;
 
     // The value of the blendshape when the toggle is off. Range from 0-100.
     [SerializeField]
@@ -81,6 +85,24 @@ namespace YOTS
     // The value of the blendshape when the toggle is on. Range from 0-100.
     [SerializeField]
     public float onValue = 100.0f;
+  }
+
+  [System.Serializable]
+  public class ShaderToggleSpec {
+    [SerializeField]
+    public string materialProperty;
+
+    [SerializeField]
+    public string path = "";
+
+    [SerializeField]
+    public List<string> paths = new List<string>();
+
+    [SerializeField]
+    public float offValue = 0.0f;
+
+    [SerializeField]
+    public float onValue = 1.0f;
   }
 
   [System.Serializable]
@@ -105,6 +127,8 @@ namespace YOTS
       new List<GeneratedMeshToggle>();
     public List<GeneratedBlendShape> blendShapes =
       new List<GeneratedBlendShape>();
+    public List<GeneratedShaderToggle> shaderToggles =
+      new List<GeneratedShaderToggle>();
   }
 
   [System.Serializable]
@@ -117,6 +141,14 @@ namespace YOTS
   public class GeneratedBlendShape {
     public string path;
     public string blendShape;
+    public float value;
+  }
+
+  // Add new class for generated shader toggles
+  [System.Serializable]
+  public class GeneratedShaderToggle {
+    public string path;
+    public string materialProperty;
     public float value;
   }
 
@@ -179,6 +211,10 @@ namespace YOTS
       return "BlendShape:" + path + "/" + blendShape;
     }
 
+    private static string GetShaderToggleAttributeId(string path, string materialProperty) {
+      return "ShaderToggle:" + path + "/" + materialProperty;
+    }
+
     public static AnimatorController GenerateAnimator(string configJson,
         VRCExpressionParameters vrcParams, VRCExpressionsMenu vrcMenu) {
       Debug.Log("=== Starting Animator Generation Process ===");
@@ -233,6 +269,16 @@ namespace YOTS
           binding.path = blendShape.path;
           binding.type = typeof(SkinnedMeshRenderer);
           binding.propertyName = "blendShape." + blendShape.blendShape;
+          AnimationUtility.SetEditorCurve(newClip, binding, curve);
+        }
+
+        // Apply shader toggles
+        foreach (var shaderToggle in clipConfig.shaderToggles) {
+          AnimationCurve curve = AnimationCurve.Constant(0, 0, shaderToggle.value);
+          EditorCurveBinding binding = new EditorCurveBinding();
+          binding.path = shaderToggle.path;
+          binding.type = typeof(SkinnedMeshRenderer);
+          binding.propertyName = $"material.{shaderToggle.materialProperty}";
           AnimationUtility.SetEditorCurve(newClip, binding, curve);
         }
 
@@ -483,6 +529,34 @@ namespace YOTS
             });
           }
         }
+        // Add shader toggles
+        if (toggle.shaderToggles != null) {
+          foreach (var st in toggle.shaderToggles) {
+            // Validate that at least one path is provided
+            if (string.IsNullOrEmpty(st.path) && (st.paths == null || st.paths.Count == 0)) {
+              throw new ArgumentException($"Shader toggle in '{toggle.name}' must specify either 'path' or 'paths'");
+            }
+
+            // Handle single path
+            if (!string.IsNullOrEmpty(st.path)) {
+              onAnim.shaderToggles.Add(new GeneratedShaderToggle {
+                path = st.path,
+                materialProperty = st.materialProperty,
+                value = st.onValue
+              });
+            }
+            // Handle multiple paths
+            if (st.paths != null) {
+              foreach (var path in st.paths) {
+                onAnim.shaderToggles.Add(new GeneratedShaderToggle {
+                  path = path,
+                  materialProperty = st.materialProperty,
+                  value = st.onValue
+                });
+              }
+            }
+          }
+        }
         genAnimConfig.animations.Add(onAnim);
 
         GeneratedAnimationClipConfig offAnim = new GeneratedAnimationClipConfig();
@@ -501,6 +575,34 @@ namespace YOTS
             });
           }
         }
+        // Add shader toggles
+        if (toggle.shaderToggles != null) {
+          foreach (var st in toggle.shaderToggles) {
+            // Validate that at least one path is provided
+            if (string.IsNullOrEmpty(st.path) && (st.paths == null || st.paths.Count == 0)) {
+              throw new ArgumentException($"Shader toggle in '{toggle.name}' must specify either 'path' or 'paths'");
+            }
+
+            // Handle single path
+            if (!string.IsNullOrEmpty(st.path)) {
+              offAnim.shaderToggles.Add(new GeneratedShaderToggle {
+                path = st.path,
+                materialProperty = st.materialProperty,
+                value = st.offValue
+              });
+            }
+            // Handle multiple paths
+            if (st.paths != null) {
+              foreach (var path in st.paths) {
+                offAnim.shaderToggles.Add(new GeneratedShaderToggle {
+                  path = path,
+                  materialProperty = st.materialProperty,
+                  value = st.offValue
+                });
+              }
+            }
+          }
+        }
         genAnimConfig.animations.Add(offAnim);
       }
       return genAnimConfig;
@@ -517,6 +619,11 @@ namespace YOTS
       float GetOffValueForBlend(string path, string blendShapeName, List<GeneratedBlendShape> offList) {
         var offBlend = offList?.FirstOrDefault(bs => bs.path == path && bs.blendShape == blendShapeName);
         return offBlend != null ? offBlend.value : 0.0f;
+      }
+
+      float GetOffValueForShader(string path, string materialProperty, List<GeneratedShaderToggle> offList) {
+        var offShader = offList?.FirstOrDefault(st => st.path == path && st.materialProperty == materialProperty);
+        return offShader != null ? offShader.value : 0.0f;
       }
 
       // Create mapping from toggle name -> (on animation, off animation)
@@ -577,6 +684,12 @@ namespace YOTS
             attributes.Add(attr);
           }
         }
+        if (pair.on.shaderToggles != null) {
+          foreach (var st in pair.on.shaderToggles) {
+            string attr = GetShaderToggleAttributeId(st.path, st.materialProperty);
+            attributes.Add(attr);
+          }
+        }
         foreach (var attr in attributes) {
           if (!attributeToToggles.TryGetValue(attr, out var set)) {
             set = new HashSet<string>();
@@ -634,14 +747,28 @@ namespace YOTS
           }
         }
 
-        bool hasIndependent = (independentMesh.Count > 0 || independentBlend.Count > 0);
-        bool hasDependent = (dependentMesh.Count > 0 || dependentBlend.Count > 0);
+        // Work out which of the animation's shader toggles are overrides and which are independent
+        List<GeneratedShaderToggle> independentShader = new List<GeneratedShaderToggle>();
+        List<GeneratedShaderToggle> dependentShader = new List<GeneratedShaderToggle>();
+        if (pair.on.shaderToggles != null) {
+          foreach (var st in pair.on.shaderToggles) {
+            string attr = GetShaderToggleAttributeId(st.path, st.materialProperty);
+            if (attributeToToggles[attr].Count == 1)
+              independentShader.Add(st);
+            else
+              dependentShader.Add(st);
+          }
+        }
+
+        bool hasIndependent = (independentMesh.Count > 0 || independentBlend.Count > 0 || independentShader.Count > 0);
+        bool hasDependent = (dependentMesh.Count > 0 || dependentBlend.Count > 0 || dependentShader.Count > 0);
 
         if (hasIndependent && hasDependent) {
           GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
           dependentOn.name = toggleName + "_Dependent_On";
           dependentOn.meshToggles = dependentMesh;
           dependentOn.blendShapes = dependentBlend;
+          dependentOn.shaderToggles = dependentShader;
 
           GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
           dependentOff.name = toggleName + "_Dependent_Off";
@@ -658,11 +785,19 @@ namespace YOTS
               value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
             })
           .ToList();
+          dependentOff.shaderToggles = dependentShader
+            .Select(st => new GeneratedShaderToggle {
+              path = st.path,
+              materialProperty = st.materialProperty,
+              value = GetOffValueForShader(st.path, st.materialProperty, pair.off.shaderToggles)
+            })
+          .ToList();
 
           GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
           independentOn.name = toggleName + "_Independent_On";
           independentOn.meshToggles = independentMesh;
           independentOn.blendShapes = independentBlend;
+          independentOn.shaderToggles = independentShader;
 
           GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
           independentOff.name = toggleName + "_Independent_Off";
@@ -677,6 +812,13 @@ namespace YOTS
               path = bs.path,
               blendShape = bs.blendShape,
               value = GetOffValueForBlend(bs.path, bs.blendShape, pair.off.blendShapes)
+            })
+          .ToList();
+          independentOff.shaderToggles = independentShader
+            .Select(st => new GeneratedShaderToggle {
+              path = st.path,
+              materialProperty = st.materialProperty,
+              value = GetOffValueForShader(st.path, st.materialProperty, pair.off.shaderToggles)
             })
           .ToList();
 
@@ -708,10 +850,12 @@ namespace YOTS
           independentOn.name = toggleName + "_Independent_On";
           independentOn.meshToggles = pair.on.meshToggles;
           independentOn.blendShapes = pair.on.blendShapes;
+          independentOn.shaderToggles = pair.on.shaderToggles;
           GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
           independentOff.name = toggleName + "_Independent_Off";
           independentOff.meshToggles = pair.off.meshToggles;
           independentOff.blendShapes = pair.off.blendShapes;
+          independentOff.shaderToggles = pair.off.shaderToggles;
 
           newAnimations.Add(independentOn);
           newAnimations.Add(independentOff);
@@ -733,10 +877,12 @@ namespace YOTS
           dependentOn.name = toggleName + "_Dependent_On";
           dependentOn.meshToggles = pair.on.meshToggles;
           dependentOn.blendShapes = pair.on.blendShapes;
+          dependentOn.shaderToggles = pair.on.shaderToggles;
           GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
           dependentOff.name = toggleName + "_Dependent_Off";
           dependentOff.meshToggles = pair.off.meshToggles;
           dependentOff.blendShapes = pair.off.blendShapes;
+          dependentOff.shaderToggles = pair.off.shaderToggles;
 
           newAnimations.Add(dependentOn);
           newAnimations.Add(dependentOff);
