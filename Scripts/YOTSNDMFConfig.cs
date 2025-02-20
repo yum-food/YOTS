@@ -17,12 +17,18 @@ namespace YOTS
     [TextArea(5, 80)]  // Min 5 lines, max 80 lines
     public string jsonContent;
 
+    [SerializeField, HideInInspector]
+    private TextAsset lastJsonConfig;
+
     void OnValidate() {
       gameObject.tag = "EditorOnly";
       
-      // Update jsonContent when jsonConfig changes
-      if (jsonConfig != null && string.IsNullOrEmpty(jsonContent)) {
-        jsonContent = jsonConfig.text;
+      // Only update jsonContent when jsonConfig actually changes
+      if (jsonConfig != lastJsonConfig) {
+        if (jsonConfig != null) {
+          jsonContent = jsonConfig.text;
+        }
+        lastJsonConfig = jsonConfig;
       }
     }
   }
