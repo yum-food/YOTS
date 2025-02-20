@@ -90,7 +90,7 @@ namespace YOTS
             return;
           }
           // Create copies so the originals don't get modified
-          menu = UnityEngine.Object.Instantiate(menu);
+          menu = DeepCopyMenu(menu);
           parameters = UnityEngine.Object.Instantiate(parameters);
           descriptor.expressionsMenu = menu;
           descriptor.expressionParameters = parameters;
@@ -165,6 +165,18 @@ namespace YOTS
 
     private class YOTSBuildState {
       public string jsonConfig;
+    }
+
+    private static VRCExpressionsMenu DeepCopyMenu(VRCExpressionsMenu sourceMenu) {
+        var copiedMenu = UnityEngine.Object.Instantiate(sourceMenu);
+        // Deep copy all submenu references
+        for (int i = 0; i < copiedMenu.controls.Count; i++) {
+            var control = copiedMenu.controls[i];
+            if (control.type == VRCExpressionsMenu.Control.ControlType.SubMenu) {
+                control.subMenu = DeepCopyMenu(control.subMenu);
+            }
+        }
+        return copiedMenu;
     }
   }
 }

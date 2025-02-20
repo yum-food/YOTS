@@ -45,7 +45,7 @@ namespace YOTS
     // /YOTS. So if you put "Clothes" here, it'll be placed under
     // /YOTS/Clothes.
     [SerializeField]
-    public string menuPath = "/";
+    public string menuPath = "/YOTS";
 
     // The default value of the toggle. Range from 0-1.
     // For example, if you want a gimmick to start toggled off, set this to
@@ -818,6 +818,7 @@ namespace YOTS
         .Select(g => g.First())
         .ToList();
 
+      // Update parameters
       var paramList = new List<VRCExpressionParameters.Parameter>();
       paramList.AddRange(vrcParams.parameters.Where(p => !uniqueToggles.Any(t => t.name == p.name)));
       foreach (var toggle in uniqueToggles) {
@@ -830,22 +831,23 @@ namespace YOTS
         });
       }
       vrcParams.parameters = paramList.ToArray();
-      vrcMenu.controls.RemoveAll(c => c.name == "YOTS");
-      // Create YOTS submenu
-      VRCExpressionsMenu yotsSubmenu = ScriptableObject.CreateInstance<VRCExpressionsMenu>();
-      yotsSubmenu.name = "YOTS";
-      yotsSubmenu.controls = new List<VRCExpressionsMenu.Control>();
+
+      // Add toggles to menu
       foreach (var toggle in toggleSpecs) {
-        VRCExpressionsMenu currentMenu = yotsSubmenu;
-        // Recursively create menus until we wind up at the leaf.
-        if (!string.IsNullOrEmpty(toggle.menuPath) && toggle.menuPath != "/") {
+        VRCExpressionsMenu currentMenu = vrcMenu;
+        
+        // Navigate or create menu path if specified
+        if (!string.IsNullOrEmpty(toggle.menuPath)) {
           string trimmedPath = toggle.menuPath.Trim('/');
-          var sections = trimmedPath.Split('/');
-          foreach (var section in sections) {
-            currentMenu = GetOrCreateSubmenu(currentMenu, section);
+          if (!string.IsNullOrEmpty(trimmedPath)) {
+            var sections = trimmedPath.Split('/');
+            foreach (var section in sections) {
+              currentMenu = GetOrCreateSubmenu(currentMenu, section);
+            }
           }
         }
-        // Add toggle.
+
+        // Add toggle control
         if (toggle.type == "radial") {
           currentMenu.controls.Add(new VRCExpressionsMenu.Control{
             name = toggle.name,
@@ -863,13 +865,6 @@ namespace YOTS
           });
         }
       }
-
-      // Add YOTS submenu to main menu.
-      vrcMenu.controls.Add(new VRCExpressionsMenu.Control{
-        name = "YOTS",
-        type = VRCExpressionsMenu.Control.ControlType.SubMenu,
-        subMenu = yotsSubmenu
-      });
     }
   }
 }

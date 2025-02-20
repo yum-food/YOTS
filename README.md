@@ -68,7 +68,8 @@ Toggle options are documented in two places:
 * Radial puppets (sliders) are created as float parameters.
 * All parameters are synced and saved by default.
   * You can override this with the `synced` and `saved` flags.
-* Menus are always placed under /YOTS.
+* YOTS will not stop you from over-filling menus.
+  * Auto-splitting menus is not yet implemented.
 * The generated VRChat parameter and animator parameters use the "name" field.
   No namespacing is applied.
 * The generated animator has exactly as many layers as the maximum length of
