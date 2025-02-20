@@ -1,0 +1,13 @@
+{
+  "api_version": "1.0",
+  "toggles": [
+    {
+      "name": "Shirt",
+      "dependencies": ["Jacket"]
+    },
+    {
+      "name": "Jacket",
+      "dependencies": ["Shirt"]
+    }
+  ]
+}

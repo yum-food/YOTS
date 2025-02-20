@@ -33,10 +33,13 @@ Open your text editor of choice and paste this in:
 
 Feel free to replace "Shirt" with the name of some other mesh on your avatar.
 
-Save it to Assets/animator.json.
+Save it to Assets/animator.json. [1]
 
-Drag Assets/yum\_food/YOTS.prefab anywhere on your avatar. Select it in the
-hierarchy, and drag Assets/animator.json onto the "Json Config" field.
+Drag Assets/yum\_food/YOTS.prefab anywhere on your avatar. [2]
+
+Select it in the hierarchy, and drag Assets/animator.json onto the "Json Config" field. [3]
+
+![Unity should look like this.](./Images/setup_picture_00.PNG)
 
 Enter play mode. Enable an emulator (I use Lyuma's av3emulator). Open your
 menu. You should see a YOTS submenu. Click it, then click Shirt. Your shirt
@@ -56,22 +59,25 @@ A logical sequence of things to try:
 Toggle options are documented in two places:
 
 1. The ToggleSpec definition at the top of
-   [YOTSCore.cs](./Scripts/YOTSCore.cs). This is the definitive source of
-   truth.
+   [YOTSCore.cs](./Scripts/YOTSCore.cs).
 2. The [Examples](./Examples).
 
 ## Technical details
 
 * Toggles are created as boolean parameters.
 * Radial puppets (sliders) are created as float parameters.
-* By default, all parameters are synced and saved. These can both be
-  overridden.
+* All parameters are synced and saved by default.
+  * You can override this with the `synced` and `saved` flags.
 * The generated VRChat parameter and animator parameters use the "name" field.
   No namespacing is applied.
 * The generated animator has exactly as many layers as the maximum length of
   any dependency chain in your dependency graph.
 * The generated animator's parameters and layers are simply appended to your
   input animator.
+* Each layer consists of a single direct blendtree (DBT) with write defaults
+  on.
+  * Write defaults [behave uniquely on DBTs.](https://vrc.school/docs/Other/DBT-Combining#af9b08d723fb47698407a8c0dde577dc).
+    They do not overwrite layers that come before them.
 
 ## Motivation
 
@@ -502,3 +508,8 @@ check which materials exist. **Any time a (gameobject,materials) pair is
 animated, we must generate animations for (gameobject,neighbor_material) for
 every neighboring material on that gameobject.** These generated animations
 should be logged during generation.
+
+### 3. GUI frontend
+
+There's no reason why we can't make a GUI for generating and modifying the
+config file. This would be appealing to some users.
