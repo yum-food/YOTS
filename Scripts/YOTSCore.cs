@@ -64,6 +64,12 @@ namespace YOTS
     // Whether the corresponding VRChat parameter is saved.
     [SerializeField]
     public bool saved = true;
+
+    // If true, no menu entry will be created for this toggle.
+    // The parameter will still be created and can be controlled by other means
+    // - for example, via contacts.
+    [SerializeField]
+    public bool disableMenuEntry = false;
   }
 
   [System.Serializable]
@@ -978,10 +984,14 @@ namespace YOTS
       }
       vrcParams.parameters = paramList.ToArray();
 
-      // Add toggles to menu
+      // Add toggles to menu (skipping those with disableMenuEntry=true)
       foreach (var toggle in toggleSpecs) {
+        // Skip creating menu entries for toggles with disableMenuEntry=true
+        if (toggle.disableMenuEntry)
+          continue;
+
         VRCExpressionsMenu currentMenu = vrcMenu;
-        
+
         // Navigate or create menu path if specified
         if (!string.IsNullOrEmpty(toggle.menuPath)) {
           string trimmedPath = toggle.menuPath.Trim('/');
