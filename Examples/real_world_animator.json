@@ -1,0 +1,446 @@
+{
+  "api_version": "1.0",
+  "toggles": [
+    {
+      "name": "Cardigan",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Cardigan"],
+      "blendShapes": [
+        {
+          "path": "Shirt",
+          "blendShape": "Cardigan on"
+        }
+      ]
+    },
+    {
+      "name": "Shirt",
+      "menuPath": "/Clothes",
+      "dependencies": ["Bra", "Tank top"],
+      "meshToggles": ["Shirt"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Smush nips"
+        },
+        {
+          "path": "Bra",
+          "blendShape": "Shirt on"
+        },
+        {
+          "path": "Cardigan",
+          "blendShape": "Shirt on"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Smush nips"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Shirt on"
+        },
+        {
+          "path": "Skirt",
+          "blendShape": "Shirt off",
+          "offValue": 100.0,
+          "onValue": 0.0
+        }
+      ]
+    },
+    {
+      "name": "Tank top",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Tank top"],
+      "blendShapes": [
+        {
+          "path": "Skirt",
+          "blendShape": "Shirt off",
+          "offValue": 100.0,
+          "onValue": 0.0
+        }
+      ]
+    },
+    {
+      "name": "Skirt",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Skirt"],
+      "blendShapes": [
+        {
+          "path": "Shirt",
+          "blendShape": "Skirt on"
+        }
+      ]
+    },
+    {
+      "name": "Socks",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Socks"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Thigh squish"
+        }
+      ]
+    },
+    {
+      "name": "Shoes",
+      "menuPath": "/Clothes",
+      "meshToggles": ["Shoes"],
+      "blendShapes": []
+    },
+
+    {
+      "name": "Bra",
+      "menuPath": "/Clothes/NSFW",
+      "meshToggles": ["Bra"],
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Bra on"
+        },
+        {
+          "path": "Body",
+          "blendShape": "Smush nips"
+        },
+        {
+          "path": "Body",
+          "blendShape": "Boob spread",
+          "offValue": 100.0,
+          "onValue": 0.0
+        },
+        {
+          "path": "Cardigan",
+          "blendShape": "Boob spread",
+          "offValue": 100.0,
+          "onValue": 0.0
+        },
+        {
+          "path": "Shirt",
+          "blendShape": "Bra on"
+        },
+        {
+          "path": "Shirt",
+          "blendShape": "Boob spread",
+          "offValue": 100.0,
+          "onValue": 0.0
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Bra on"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Smush nips"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Nipple piercings",
+          "offValue": 100.0,
+          "onValue": 0.0
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Boob spread",
+          "offValue": 100.0,
+          "onValue": 0.0
+        }
+      ]
+    },
+    {
+      "name": "Nipple piercing size",
+      "menuPath": "/Clothes/NSFW",
+      "defaultValue": 0.7,
+      "type": "radial",
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Nipple piercing size"
+        }
+      ]
+    },
+    {
+      "name": "Panties",
+      "menuPath": "/Clothes/NSFW",
+      "meshToggles": ["Panties"],
+      "blendShapes": []
+    },
+
+
+    {
+      "name": "Hair",
+      "menuPath": "/Gimmicks",
+      "meshToggles": ["Hair"],
+      "blendShapes": []
+    },
+    {
+      "name": "Outlines",
+      "menuPath": "/Gimmicks",
+      "saved": false,
+      "shaderToggles": [
+        {
+          "materialProperty": "_Outlines_Enabled_Dynamic",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"]
+        }
+      ]
+    },
+    {
+      "name": "Sweat",
+      "menuPath": "/Gimmicks",
+      "defaultValue": 0.0,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_DetailNormalMapScale",
+          "paths": ["Body"]
+        },
+        {
+          "materialProperty": "_Matcap1_Strength",
+          "paths": ["Body"]
+        }
+      ]
+    },
+
+    {
+      "name": "Octaves",
+      "menuPath": "/Gimmicks/Vertex domain warping",
+      "defaultValue": 0.0,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Vertex_Domain_Warping_Spatial_Octaves",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"],
+          "offValue": 0.0,
+          "onValue": 4.0
+        }
+      ]
+    },
+    {
+      "name": "Strength",
+      "menuPath": "/Gimmicks/Vertex domain warping",
+      "defaultValue": 0.2,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Vertex_Domain_Warping_Spatial_Strength",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"],
+          "offValue": 0.0,
+          "onValue": 0.005
+        }
+      ]
+    },
+    {
+      "name": "Scale",
+      "menuPath": "/Gimmicks/Vertex domain warping",
+      "defaultValue": 0.5,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Vertex_Domain_Warping_Spatial_Scale",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"],
+          "offValue": 0.0,
+          "onValue": 0.0002
+        }
+      ]
+    },
+    {
+      "name": "Speed",
+      "menuPath": "/Gimmicks/Vertex domain warping",
+      "defaultValue": 0.5,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Vertex_Domain_Warping_Speed",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"],
+          "offValue": 0.0,
+          "onValue": 0.02
+        }
+      ]
+    },
+
+    {
+      "name": "Enable",
+      "menuPath": "/Gimmicks/Focal length control",
+      "defaultValue": 0.0,
+      "shaderToggles": [
+        {
+          "materialProperty": "_Focal_Length_Enabled_Dynamic",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"]
+        }
+      ]
+    },
+    {
+      "name": "Focal length",
+      "menuPath": "/Gimmicks/Focal length control",
+      "defaultValue": 0.333,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Focal_Length_Multiplier",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"],
+          "offValue": 0.01,
+          "onValue": 3
+        }
+      ]
+    },
+
+    {
+      "name": "Brightness",
+      "menuPath": "/Lighting",
+      "defaultValue": 0.5,
+      "type": "radial",
+      "saved": false,
+      "shaderToggles": [
+        {
+          "materialProperty": "_Brightness_Multiplier",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"],
+          "offValue": 0.0,
+          "onValue": 2.0
+        }
+      ]
+    },
+    {
+      "name": "Min brightness",
+      "menuPath": "/Lighting",
+      "defaultValue": 0.05,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Min_Brightness",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"]
+        }
+      ]
+    },
+    {
+      "name": "LTCGI strength",
+      "menuPath": "/Lighting",
+      "defaultValue": 0.0,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_LTCGI_Strength",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"]
+        }
+      ]
+    },
+    {
+      "name": "Wrapped (diffuse)",
+      "menuPath": "/Lighting",
+      "defaultValue": 0.25,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Wrap_NoL_Diffuse_Strength",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"]
+        }
+      ]
+    },
+    {
+      "name": "Wrapped (specular)",
+      "menuPath": "/Lighting",
+      "defaultValue": 0.1,
+      "type": "radial",
+      "shaderToggles": [
+        {
+          "materialProperty": "_Wrap_NoL_Specular_Strength",
+          "paths": ["Body", "Bra", "Cardigan", "Face", "Glasses", "Hair", "Panties", "Shirt", "Tank top", "Shoes", "Skirt", "Socks"]
+        }
+      ]
+    },
+
+    {
+      "name": "Arms_Down_Corrective_L",
+      "type": "radial",
+      "disableMenuEntry": true,
+      "synced": false,
+      "saved": false,
+      "defaultValue": 0.0,
+      "blendShapes": [
+        {
+          "path": "Bra",
+          "blendShape": "Arms down corrective.L"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Arms down corrective.L"
+        }
+      ]
+    },
+    {
+      "name": "Arms_Down_Corrective_R",
+      "type": "radial",
+      "disableMenuEntry": true,
+      "synced": false,
+      "saved": false,
+      "defaultValue": 0.0,
+      "blendShapes": [
+        {
+          "path": "Bra",
+          "blendShape": "Arms down corrective.R"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Arms down corrective.R"
+        }
+      ]
+    },
+    {
+      "name": "Boob_Grav_Physics_Front",
+      "type": "radial",
+      "disableMenuEntry": true,
+      "synced": false,
+      "saved": false,
+      "defaultValue": 0.0,
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Boob gravity stretch"
+        },
+        {
+          "path": "Bra",
+          "blendShape": "Boob gravity stretch"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Boob gravity stretch"
+        },
+        {
+          "path": "Shirt",
+          "blendShape": "Boob gravity stretch"
+        },
+        {
+          "path": "Cardigan",
+          "blendShape": "Boob gravity stretch"
+        }
+      ]
+    },
+    {
+      "name": "Boob_Grav_Physics_Back",
+      "type": "radial",
+      "disableMenuEntry": true,
+      "synced": false,
+      "saved": false,
+      "defaultValue": 0.0,
+      "blendShapes": [
+        {
+          "path": "Body",
+          "blendShape": "Boob gravity compress"
+        },
+        {
+          "path": "Bra",
+          "blendShape": "Boob gravity compress"
+        },
+        {
+          "path": "Tank top",
+          "blendShape": "Boob gravity compress"
+        },
+        {
+          "path": "Shirt",
+          "blendShape": "Boob gravity compress"
+        },
+        {
+          "path": "Cardigan",
+          "blendShape": "Boob gravity compress"
+        }
+      ]
+    }
+  ]
+}
