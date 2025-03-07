@@ -14,10 +14,14 @@ namespace YOTS
 {
   [System.Serializable]
   public class ToggleSpec {
-    // The name of the toggle. This is plumbed into the menu, the VRChat
-    // parameters, and the animator parameters.
+    // The name of the toggle. This is shown in the menu.
     [SerializeField]
     public string name;
+
+    // The parameter name used internally. If not specified, it will be 
+    // auto-generated from the menuPath and name.
+    [SerializeField]
+    public string parameterName;
 
     // The type of toggle.
     // Accepted values:
@@ -70,6 +74,28 @@ namespace YOTS
     // - for example, via contacts.
     [SerializeField]
     public bool disableMenuEntry = false;
+
+    // Get the effective parameter name, generating one if not specified
+    public string GetParameterName() {
+      if (!string.IsNullOrEmpty(parameterName)) {
+        return parameterName;
+      }
+      
+      // Generate parameter name from menuPath and name
+      string fullPath = menuPath.TrimEnd('/') + "/" + name;
+      // Remove leading slash if present
+      if (fullPath.StartsWith("/")) {
+        fullPath = fullPath.Substring(1);
+      }
+      // Replace non-alphanumeric characters with underscores
+      string sanitized = System.Text.RegularExpressions.Regex.Replace(
+        fullPath, "[^a-zA-Z0-9]", "_");
+      // Ensure it doesn't start with a number
+      if (char.IsDigit(sanitized[0])) {
+        sanitized = "_" + sanitized;
+      }
+      return sanitized;
+    }
   }
 
   [System.Serializable]
@@ -422,21 +448,29 @@ namespace YOTS
     }
 
     private static Dictionary<string, int> TopologicalSortToggles(List<ToggleSpec> toggleSpecs) {
-      // Get mapping from toggle name to children
+      // Get mapping from toggle parameter name to children
       Dictionary<string, HashSet<string>> graph = new Dictionary<string, HashSet<string>>();
       foreach (var toggle in toggleSpecs) {
-        if (!graph.ContainsKey(toggle.name))
-          graph[toggle.name] = new HashSet<string>();
+        string paramName = toggle.GetParameterName();
+        if (!graph.ContainsKey(paramName))
+          graph[paramName] = new HashSet<string>();
         foreach (var dep in toggle.dependencies) {
-          if (!graph.ContainsKey(dep))
-            graph[dep] = new HashSet<string>();
-          graph[dep].Add(toggle.name);
+          // Find the toggle with this dependency name
+          var depToggle = toggleSpecs.FirstOrDefault(t => t.name == dep);
+          if (depToggle == null) {
+            throw new System.Exception($"Toggle '{toggle.name}' has dependency '{dep}' that doesn't exist");
+          }
+          string depParamName = depToggle.GetParameterName();
+          if (!graph.ContainsKey(depParamName))
+            graph[depParamName] = new HashSet<string>();
+          graph[depParamName].Add(paramName);
         }
       }
 
       Dictionary<string, int> inDegree = new Dictionary<string, int>();
       foreach (var toggle in toggleSpecs) {
-        inDegree[toggle.name] = toggle.dependencies.Count;
+        string paramName = toggle.GetParameterName();
+        inDegree[paramName] = toggle.dependencies.Count;
       }
 
       Dictionary<string, int> depths = new Dictionary<string, int>();
@@ -468,7 +502,7 @@ namespace YOTS
 
       if (processedNodes != toggleSpecs.Count) {
         var cycleNodes = toggleSpecs
-          .Where(t => !depths.ContainsKey(t.name))
+          .Where(t => !depths.ContainsKey(t.GetParameterName()))
           .Select(t => t.name)
           .ToList();
         throw new System.Exception($"Dependency cycle detected in toggle specifications. Nodes involved: {string.Join(", ", cycleNodes)}");
@@ -482,7 +516,7 @@ namespace YOTS
       // Sort toggles into layers
       Dictionary<string, int> depths = TopologicalSortToggles(toggleSpecs);
       var togglesByDepth = toggleSpecs
-        .GroupBy(t => depths[t.name])
+        .GroupBy(t => depths[t.GetParameterName()])
         .OrderBy(g => g.Key)
         .ToList();
       // Add layers
@@ -491,7 +525,7 @@ namespace YOTS
         AnimatorLayer layer = new AnimatorLayer();
         layer.name = i == 0 ? "YOTS_BaseLayer" : $"YOTS_OverrideLayer{(i - 1).ToString("00")}";
         foreach (var toggle in depthGroup) {
-          string paramName = toggle.name;
+          string paramName = toggle.GetParameterName();
           if (!genAnimatorConfig.parameters.Any(p => p.name == paramName))
             genAnimatorConfig.parameters.Add(new AnimatorParameterSetting{
               name = paramName,
@@ -499,12 +533,12 @@ namespace YOTS
             });
 
           layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-            name = toggle.name + "_On",
+            name = paramName + "_On",
             parameter = paramName
           });
 
           layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-            name = toggle.name + "_Off",
+            name = paramName + "_Off",
             parameter = paramName
           });
         }
@@ -519,8 +553,10 @@ namespace YOTS
     private static GeneratedAnimationsConfig GenerateAnimationConfig(List<ToggleSpec> toggleSpecs) {
       GeneratedAnimationsConfig genAnimConfig = new GeneratedAnimationsConfig();
       foreach (var toggle in toggleSpecs) {
+        string paramName = toggle.GetParameterName();
+        
         GeneratedAnimationClipConfig onAnim = new GeneratedAnimationClipConfig();
-        onAnim.name = toggle.name + "_On";
+        onAnim.name = paramName + "_On";
         if (toggle.meshToggles != null) {
           foreach (var mesh in toggle.meshToggles) {
             onAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 1.0f });
@@ -566,7 +602,7 @@ namespace YOTS
         genAnimConfig.animations.Add(onAnim);
 
         GeneratedAnimationClipConfig offAnim = new GeneratedAnimationClipConfig();
-        offAnim.name = toggle.name + "_Off";
+        offAnim.name = paramName + "_Off";
         if (toggle.meshToggles != null) {
           foreach (var mesh in toggle.meshToggles) {
             offAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 0.0f });
@@ -965,17 +1001,18 @@ namespace YOTS
         VRCExpressionsMenu vrcMenu
         ) {
       var uniqueToggles = toggleSpecs
-        .Where(t => t.name != "YOTS_Weight")
-        .GroupBy(t => t.name)
+        .Where(t => t.GetParameterName() != "YOTS_Weight")
+        .GroupBy(t => t.GetParameterName())
         .Select(g => g.First())
         .ToList();
 
       // Update parameters
       var paramList = new List<VRCExpressionParameters.Parameter>();
-      paramList.AddRange(vrcParams.parameters.Where(p => !uniqueToggles.Any(t => t.name == p.name)));
+      paramList.AddRange(vrcParams.parameters.Where(p => !uniqueToggles.Any(t => t.GetParameterName() == p.name)));
       foreach (var toggle in uniqueToggles) {
+        string paramName = toggle.GetParameterName();
         paramList.Add(new VRCExpressionParameters.Parameter{
-          name = toggle.name,
+          name = paramName,
           valueType = toggle.type == "radial" ? VRCExpressionParameters.ValueType.Float : VRCExpressionParameters.ValueType.Bool,
           defaultValue = toggle.defaultValue,
           saved = toggle.saved,
@@ -1003,20 +1040,21 @@ namespace YOTS
           }
         }
 
-        // Add toggle control
+        // Add toggle control - use toggle.name for display but paramName for the parameter
+        string paramName = toggle.GetParameterName();
         if (toggle.type == "radial") {
           currentMenu.controls.Add(new VRCExpressionsMenu.Control{
             name = toggle.name,
             type = VRCExpressionsMenu.Control.ControlType.RadialPuppet,
             subParameters = new VRCExpressionsMenu.Control.Parameter[]{
-              new VRCExpressionsMenu.Control.Parameter { name = toggle.name }
+              new VRCExpressionsMenu.Control.Parameter { name = paramName }
             }
           });
         } else {
           currentMenu.controls.Add(new VRCExpressionsMenu.Control{
             name = toggle.name,
             type = VRCExpressionsMenu.Control.ControlType.Toggle,
-            parameter = new VRCExpressionsMenu.Control.Parameter { name = toggle.name },
+            parameter = new VRCExpressionsMenu.Control.Parameter { name = paramName },
             value = 1f
           });
         }
