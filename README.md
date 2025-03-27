@@ -70,8 +70,9 @@ Toggle options are documented in two places:
   * You can override this with the `synced` and `saved` flags.
 * YOTS will not stop you from over-filling menus.
   * Auto-splitting menus is not yet implemented.
-* The generated VRChat parameter and animator parameters use the "name" field.
-  No namespacing is applied.
+* The generated VRChat parameter and animator parameters are simply
+  "menuPath/name". For example, if you create a toggle called "Shirt" in the
+  menu "/Clothes", the parameter is called "/Clothes/Shirt".
 * The generated animator has exactly as many layers as the maximum length of
   any dependency chain in your dependency graph.
 * The generated animator's parameters and layers are simply appended to your

@@ -18,11 +18,6 @@ namespace YOTS
     [SerializeField]
     public string name;
 
-    // The parameter name used internally. If not specified, it will be 
-    // auto-generated from the menuPath and name.
-    [SerializeField]
-    public string parameterName;
-
     // The type of toggle.
     // Accepted values:
     //  "toggle" - A boolean toggle. Creates a boolean sync param.
@@ -77,24 +72,11 @@ namespace YOTS
 
     // Get the effective parameter name, generating one if not specified
     public string GetParameterName() {
-      if (!string.IsNullOrEmpty(parameterName)) {
-        return parameterName;
+      if (disableMenuEntry) {
+        return name;
       }
-      
-      // Generate parameter name from menuPath and name
-      string fullPath = menuPath.TrimEnd('/') + "/" + name;
-      // Remove leading slash if present
-      if (fullPath.StartsWith("/")) {
-        fullPath = fullPath.Substring(1);
-      }
-      // Replace non-alphanumeric characters with underscores
-      string sanitized = System.Text.RegularExpressions.Regex.Replace(
-        fullPath, "[^a-zA-Z0-9]", "_");
-      // Ensure it doesn't start with a number
-      if (char.IsDigit(sanitized[0])) {
-        sanitized = "_" + sanitized;
-      }
-      return sanitized;
+
+      return menuPath.TrimEnd('/') + "/" + name;
     }
   }
 
@@ -135,6 +117,9 @@ namespace YOTS
 
     [SerializeField]
     public float onValue = 1.0f;
+    
+    [SerializeField]
+    public string rendererType = "SkinnedMeshRenderer"; // Can be "SkinnedMeshRenderer" or "MeshRenderer"
   }
 
   [System.Serializable]
@@ -182,6 +167,7 @@ namespace YOTS
     public string path;
     public string materialProperty;
     public float value;
+    public string rendererType = "SkinnedMeshRenderer"; // Default to SkinnedMeshRenderer for backward compatibility
   }
 
   // These classes describe the generated JSON output for the animator configuration.
@@ -309,7 +295,14 @@ namespace YOTS
           AnimationCurve curve = AnimationCurve.Constant(0, 0, shaderToggle.value);
           EditorCurveBinding binding = new EditorCurveBinding();
           binding.path = shaderToggle.path;
-          binding.type = typeof(SkinnedMeshRenderer);
+          
+          // Use the specified renderer type
+          if (shaderToggle.rendererType == "MeshRenderer") {
+            binding.type = typeof(MeshRenderer);
+          } else {
+            binding.type = typeof(SkinnedMeshRenderer); // Default or when explicitly specified
+          }
+          
           binding.propertyName = $"material.{shaderToggle.materialProperty}";
           AnimationUtility.SetEditorCurve(newClip, binding, curve);
         }
@@ -584,7 +577,8 @@ namespace YOTS
               onAnim.shaderToggles.Add(new GeneratedShaderToggle {
                 path = st.path,
                 materialProperty = st.materialProperty,
-                value = st.onValue
+                value = st.onValue,
+                rendererType = st.rendererType
               });
             }
             // Handle multiple paths
@@ -593,7 +587,8 @@ namespace YOTS
                 onAnim.shaderToggles.Add(new GeneratedShaderToggle {
                   path = path,
                   materialProperty = st.materialProperty,
-                  value = st.onValue
+                  value = st.onValue,
+                  rendererType = st.rendererType
                 });
               }
             }
@@ -630,7 +625,8 @@ namespace YOTS
               offAnim.shaderToggles.Add(new GeneratedShaderToggle {
                 path = st.path,
                 materialProperty = st.materialProperty,
-                value = st.offValue
+                value = st.offValue,
+                rendererType = st.rendererType
               });
             }
             // Handle multiple paths
@@ -639,7 +635,8 @@ namespace YOTS
                 offAnim.shaderToggles.Add(new GeneratedShaderToggle {
                   path = path,
                   materialProperty = st.materialProperty,
-                  value = st.offValue
+                  value = st.offValue,
+                  rendererType = st.rendererType
                 });
               }
             }
@@ -831,7 +828,8 @@ namespace YOTS
             .Select(st => new GeneratedShaderToggle {
               path = st.path,
               materialProperty = st.materialProperty,
-              value = GetOffValueForShader(st.path, st.materialProperty, pair.off.shaderToggles)
+              value = GetOffValueForShader(st.path, st.materialProperty, pair.off.shaderToggles),
+              rendererType = st.rendererType
             })
           .ToList();
 
@@ -860,7 +858,8 @@ namespace YOTS
             .Select(st => new GeneratedShaderToggle {
               path = st.path,
               materialProperty = st.materialProperty,
-              value = GetOffValueForShader(st.path, st.materialProperty, pair.off.shaderToggles)
+              value = GetOffValueForShader(st.path, st.materialProperty, pair.off.shaderToggles),
+              rendererType = st.rendererType
             })
           .ToList();
 
