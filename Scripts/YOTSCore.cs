@@ -70,6 +70,10 @@ namespace YOTS
     [SerializeField]
     public bool disableMenuEntry = false;
 
+    // Parent constraint weights to animate
+    [SerializeField]
+    public List<ParentConstraintWeight> parentConstraintWeights = new List<ParentConstraintWeight>();
+
     // Get the effective parameter name, generating one if not specified
     public string GetParameterName() {
       if (disableMenuEntry) {
@@ -123,6 +127,18 @@ namespace YOTS
   }
 
   [System.Serializable]
+  public class ParentConstraintWeight {
+    [SerializeField]
+    public string path = "";
+
+    [SerializeField]
+    public float offValue = 0.0f;
+
+    [SerializeField]
+    public float onValue = 1.0f;
+  }
+
+  [System.Serializable]
   public class AnimatorConfigFile {
     [SerializeField]
     public List<ToggleSpec> toggles = new List<ToggleSpec>();
@@ -146,6 +162,7 @@ namespace YOTS
       new List<GeneratedBlendShape>();
     public List<GeneratedShaderToggle> shaderToggles =
       new List<GeneratedShaderToggle>();
+    public List<GeneratedParentConstraint> parentConstraintWeights = new List<GeneratedParentConstraint>();
   }
 
   [System.Serializable]
@@ -168,6 +185,13 @@ namespace YOTS
     public string materialProperty;
     public float value;
     public string rendererType = "SkinnedMeshRenderer"; // Default to SkinnedMeshRenderer for backward compatibility
+  }
+
+  // Add new class for generated parent constraints
+  [System.Serializable]
+  public class GeneratedParentConstraint {
+    public string path;
+    public float value;
   }
 
   // These classes describe the generated JSON output for the animator configuration.
@@ -231,6 +255,10 @@ namespace YOTS
 
     private static string GetShaderToggleAttributeId(string path, string materialProperty) {
       return "ShaderToggle:" + path + "/" + materialProperty;
+    }
+
+    private static string GetParentConstraintAttributeId(string path) {
+      return "ParentConstraint:" + path;
     }
 
     public static AnimatorController GenerateAnimator(string configJson,
@@ -304,6 +332,16 @@ namespace YOTS
           }
           
           binding.propertyName = $"material.{shaderToggle.materialProperty}";
+          AnimationUtility.SetEditorCurve(newClip, binding, curve);
+        }
+
+        // Apply parent constraint weights
+        foreach (var parentConstraint in clipConfig.parentConstraintWeights) {
+          AnimationCurve curve = AnimationCurve.Constant(0, 0, parentConstraint.value);
+          EditorCurveBinding binding = new EditorCurveBinding();
+          binding.path = parentConstraint.path;
+          binding.type = typeof(UnityEngine.Animations.ParentConstraint);
+          binding.propertyName = "m_Weight";
           AnimationUtility.SetEditorCurve(newClip, binding, curve);
         }
 
@@ -594,6 +632,15 @@ namespace YOTS
             }
           }
         }
+        // Add parent constraint weights
+        if (toggle.parentConstraintWeights != null) {
+          foreach (var pc in toggle.parentConstraintWeights) {
+            onAnim.parentConstraintWeights.Add(new GeneratedParentConstraint {
+              path = pc.path,
+              value = pc.onValue
+            });
+          }
+        }
         genAnimConfig.animations.Add(onAnim);
 
         GeneratedAnimationClipConfig offAnim = new GeneratedAnimationClipConfig();
@@ -642,6 +689,15 @@ namespace YOTS
             }
           }
         }
+        // Add parent constraint weights
+        if (toggle.parentConstraintWeights != null) {
+          foreach (var pc in toggle.parentConstraintWeights) {
+            offAnim.parentConstraintWeights.Add(new GeneratedParentConstraint {
+              path = pc.path,
+              value = pc.offValue
+            });
+          }
+        }
         genAnimConfig.animations.Add(offAnim);
       }
       return genAnimConfig;
@@ -663,6 +719,11 @@ namespace YOTS
       float GetOffValueForShader(string path, string materialProperty, List<GeneratedShaderToggle> offList) {
         var offShader = offList?.FirstOrDefault(st => st.path == path && st.materialProperty == materialProperty);
         return offShader != null ? offShader.value : 0.0f;
+      }
+
+      float GetOffValueForParentConstraint(string path, List<GeneratedParentConstraint> offList) {
+        var offPC = offList?.FirstOrDefault(pc => pc.path == path);
+        return offPC != null ? offPC.value : 0.0f;
       }
 
       // Create mapping from toggle name -> (on animation, off animation)
@@ -726,6 +787,13 @@ namespace YOTS
         if (pair.on.shaderToggles != null) {
           foreach (var st in pair.on.shaderToggles) {
             string attr = GetShaderToggleAttributeId(st.path, st.materialProperty);
+            attributes.Add(attr);
+          }
+        }
+        // Add parent constraint attributes
+        if (pair.on.parentConstraintWeights != null) {
+          foreach (var pc in pair.on.parentConstraintWeights) {
+            string attr = GetParentConstraintAttributeId(pc.path);
             attributes.Add(attr);
           }
         }
@@ -799,8 +867,23 @@ namespace YOTS
           }
         }
 
-        bool hasIndependent = (independentMesh.Count > 0 || independentBlend.Count > 0 || independentShader.Count > 0);
-        bool hasDependent = (dependentMesh.Count > 0 || dependentBlend.Count > 0 || dependentShader.Count > 0);
+        // Handle parent constraints the same way as other animated properties
+        List<GeneratedParentConstraint> independentParentConstraint = new List<GeneratedParentConstraint>();
+        List<GeneratedParentConstraint> dependentParentConstraint = new List<GeneratedParentConstraint>();
+        if (pair.on.parentConstraintWeights != null) {
+          foreach (var pc in pair.on.parentConstraintWeights) {
+            string attr = GetParentConstraintAttributeId(pc.path);
+            if (attributeToToggles[attr].Count == 1)
+              independentParentConstraint.Add(pc);
+            else
+              dependentParentConstraint.Add(pc);
+          }
+        }
+
+        bool hasIndependent = (independentMesh.Count > 0 || independentBlend.Count > 0 || 
+                              independentShader.Count > 0 || independentParentConstraint.Count > 0);
+        bool hasDependent = (dependentMesh.Count > 0 || dependentBlend.Count > 0 || 
+                            dependentShader.Count > 0 || dependentParentConstraint.Count > 0);
 
         if (hasIndependent && hasDependent) {
           GeneratedAnimationClipConfig dependentOn = new GeneratedAnimationClipConfig();
@@ -808,6 +891,7 @@ namespace YOTS
           dependentOn.meshToggles = dependentMesh;
           dependentOn.blendShapes = dependentBlend;
           dependentOn.shaderToggles = dependentShader;
+          dependentOn.parentConstraintWeights = dependentParentConstraint;
 
           GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
           dependentOff.name = toggleName + "_Dependent_Off";
@@ -832,12 +916,19 @@ namespace YOTS
               rendererType = st.rendererType
             })
           .ToList();
+          dependentOff.parentConstraintWeights = dependentParentConstraint
+            .Select(pc => new GeneratedParentConstraint {
+              path = pc.path,
+              value = GetOffValueForParentConstraint(pc.path, pair.off.parentConstraintWeights)
+            })
+          .ToList();
 
           GeneratedAnimationClipConfig independentOn = new GeneratedAnimationClipConfig();
           independentOn.name = toggleName + "_Independent_On";
           independentOn.meshToggles = independentMesh;
           independentOn.blendShapes = independentBlend;
           independentOn.shaderToggles = independentShader;
+          independentOn.parentConstraintWeights = independentParentConstraint;
 
           GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
           independentOff.name = toggleName + "_Independent_Off";
@@ -860,6 +951,12 @@ namespace YOTS
               materialProperty = st.materialProperty,
               value = GetOffValueForShader(st.path, st.materialProperty, pair.off.shaderToggles),
               rendererType = st.rendererType
+            })
+          .ToList();
+          independentOff.parentConstraintWeights = independentParentConstraint
+            .Select(pc => new GeneratedParentConstraint {
+              path = pc.path,
+              value = GetOffValueForParentConstraint(pc.path, pair.off.parentConstraintWeights)
             })
           .ToList();
 
@@ -892,11 +989,13 @@ namespace YOTS
           independentOn.meshToggles = pair.on.meshToggles;
           independentOn.blendShapes = pair.on.blendShapes;
           independentOn.shaderToggles = pair.on.shaderToggles;
+          independentOn.parentConstraintWeights = pair.on.parentConstraintWeights;
           GeneratedAnimationClipConfig independentOff = new GeneratedAnimationClipConfig();
           independentOff.name = toggleName + "_Independent_Off";
           independentOff.meshToggles = pair.off.meshToggles;
           independentOff.blendShapes = pair.off.blendShapes;
           independentOff.shaderToggles = pair.off.shaderToggles;
+          independentOff.parentConstraintWeights = pair.off.parentConstraintWeights;
 
           newAnimations.Add(independentOn);
           newAnimations.Add(independentOff);
@@ -919,11 +1018,13 @@ namespace YOTS
           dependentOn.meshToggles = pair.on.meshToggles;
           dependentOn.blendShapes = pair.on.blendShapes;
           dependentOn.shaderToggles = pair.on.shaderToggles;
+          dependentOn.parentConstraintWeights = pair.on.parentConstraintWeights;
           GeneratedAnimationClipConfig dependentOff = new GeneratedAnimationClipConfig();
           dependentOff.name = toggleName + "_Dependent_Off";
           dependentOff.meshToggles = pair.off.meshToggles;
           dependentOff.blendShapes = pair.off.blendShapes;
           dependentOff.shaderToggles = pair.off.shaderToggles;
+          dependentOff.parentConstraintWeights = pair.off.parentConstraintWeights;
 
           newAnimations.Add(dependentOn);
           newAnimations.Add(dependentOff);
