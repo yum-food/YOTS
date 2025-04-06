@@ -56,6 +56,12 @@ namespace YOTS
     [SerializeField]
     public float defaultValue = 1.0f;
 
+    [SerializeField]
+    public float offThreshold = 0.0f;
+
+    [SerializeField]
+    public float onThreshold = 1.0f;
+
     // Whether the corresponding VRChat parameter is synced.
     [SerializeField]
     public bool synced = true;
@@ -240,6 +246,8 @@ namespace YOTS
   public class AnimatorParameterSetting {
     public string name;
     public float defaultValue;
+    public float offThreshold = 0.0f;
+    public float onThreshold = 1.0f;
   }
 
   public class YOTSCore {
@@ -367,6 +375,8 @@ namespace YOTS
       foreach (var param in animatorConfig.parameters) {
         var p = new AnimatorControllerParameter();
         p.name = param.name;
+        // Note: Parameter type is always Float, even for toggles, because blend trees use floats.
+        // The VRCExpressionParameters handle the Bool/Float distinction for the menu.
         p.type = AnimatorControllerParameterType.Float;
         p.defaultFloat = param.defaultValue;
         parameters_list.Add(p);
@@ -393,11 +403,23 @@ namespace YOTS
         var param = group.Key;
         var animations = group.Value;
 
+        // Find the corresponding AnimatorParameterSetting to get thresholds
+        var paramSetting = animatorConfig.parameters.FirstOrDefault(p => p.name == param);
+        if (paramSetting == null) {
+          // This should not happen if GenerateNaiveAnimatorConfig worked correctly
+          Debug.LogError($"Could not find AnimatorParameterSetting for parameter: {param} while building base layer blend tree.");
+          continue; // Skip this parameter if settings are missing
+        }
+
         // Create a blendtree controlled by this toggle's parameter.
         var paramBlendTree = new BlendTree();
         paramBlendTree.name = $"YOTS_BlendTree_{param}";
         paramBlendTree.blendType = BlendTreeType.Simple1D;
         paramBlendTree.blendParameter = param;
+        // Use thresholds from the parameter settings
+        paramBlendTree.minThreshold = paramSetting.offThreshold;
+        paramBlendTree.maxThreshold = paramSetting.onThreshold;
+        paramBlendTree.useAutomaticThresholds = false; // Ensure manual thresholds are used
 
         var children = new List<ChildMotion>();
         foreach (var animation in animations.OrderBy(e => e.name.EndsWith("_On"))) {
@@ -406,10 +428,11 @@ namespace YOTS
             throw new InvalidOperationException($"Animation clip not found in memory: {animation.name}");
           }
 
+          // Use thresholds from paramSetting for each child motion
           children.Add(new ChildMotion{
             motion = clip,
             timeScale = 1f,
-            threshold = animation.name.EndsWith("_On") ? 1f : 0f
+            threshold = animation.name.EndsWith("_On") ? paramSetting.onThreshold : paramSetting.offThreshold
           });
         }
         paramBlendTree.children = children.ToArray();
@@ -558,9 +581,12 @@ namespace YOTS
         foreach (var toggle in depthGroup) {
           string paramName = toggle.GetParameterName();
           if (!genAnimatorConfig.parameters.Any(p => p.name == paramName))
+            // Populate thresholds when adding parameter settings
             genAnimatorConfig.parameters.Add(new AnimatorParameterSetting{
               name = paramName,
-              defaultValue = toggle.defaultValue
+              defaultValue = toggle.defaultValue,
+              offThreshold = toggle.offThreshold,
+              onThreshold = toggle.onThreshold
             });
 
           layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
