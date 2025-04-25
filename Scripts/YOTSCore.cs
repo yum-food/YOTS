@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEngine;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -44,6 +45,10 @@ namespace YOTS
     [SerializeField]
     public List<ShaderToggleSpec> shaderToggles = new List<ShaderToggleSpec>();
 
+    // External animations to use.
+    [SerializeField]
+    public List<ExternalAnimationSpec> externalAnimations = new List<ExternalAnimationSpec>();
+
     // Where to put the toggle in the menu. All toggles are placed under
     // /YOTS. So if you put "Clothes" here, it'll be placed under
     // /YOTS/Clothes.
@@ -56,9 +61,11 @@ namespace YOTS
     [SerializeField]
     public float defaultValue = 1.0f;
 
+    // Fully drive the "off" animation when the parameter is below this threshold.
     [SerializeField]
     public float offThreshold = 0.0f;
 
+    // Fully drive the "on" animation when the parameter is above this threshold.
     [SerializeField]
     public float onThreshold = 1.0f;
 
@@ -200,6 +207,18 @@ namespace YOTS
     public float value;
   }
 
+  [System.Serializable]
+  public class ExternalAnimationSpec {
+    // Path to the "on" animation clip asset (e.g., "Assets/MyAnims/External_On.anim")
+    [SerializeField]
+    public string onClipPath;
+    // Path to the "off" animation clip asset (e.g., "Assets/MyAnims/External_Off.anim")
+    [SerializeField]
+    public string offClipPath;
+    [SerializeField]
+    public bool mirror = false;
+  }
+
   // These classes describe the generated JSON output for the animator configuration.
   [System.Serializable]
   public class GeneratedAnimatorConfig {
@@ -287,15 +306,103 @@ namespace YOTS
       }
       Debug.Log($"Configuration loaded. Found {config.toggles.Count} toggles.");
 
-      // Create abstract representation of the animator.
+      // Create abstract representation of the animator structure.
       GeneratedAnimatorConfig genAnimatorConfig = GenerateNaiveAnimatorConfig(config.toggles);
       genAnimatorConfig = ApplyIndependentFixToAnimatorConfig(genAnimatorConfig);
       genAnimatorConfig = RemoveOffAnimationsFromOverrideLayers(genAnimatorConfig);
       genAnimatorConfig = RemoveUnusedAnimations(genAnimatorConfig);
+
+      animationClips.Clear();
+      Debug.Log("--- Preparing Final Animation Clips ---");
+
+      Dictionary<string, ToggleSpec> toggleSpecLookup = config.toggles
+          .GroupBy(t => t.GetParameterName())
+          .ToDictionary(g => g.Key, g => g.First());
+
+      // Iterate through the FINAL animation configurations after potential renaming/splitting
+      foreach (var finalAnimConfig in genAnimatorConfig.animations) {
+        string finalClipName = finalAnimConfig.name;
+
+        // Determine the original base parameter name from the final clip name
+        string baseParamName = finalClipName;
+        string[] suffixes = { "_Independent_On", "_Independent_Off", "_Dependent_On", "_Dependent_Off", "_On", "_Off" };
+        foreach(var suffix in suffixes) {
+          if (baseParamName.EndsWith(suffix)) {
+            baseParamName = baseParamName.Substring(0, baseParamName.Length - suffix.Length);
+            break;
+          }
+        }
+
+        if (!toggleSpecLookup.TryGetValue(baseParamName, out ToggleSpec originalToggleSpec)) {
+           Debug.LogError($"Could not find original ToggleSpec for parameter name '{baseParamName}' derived from animation clip '{finalClipName}'. Skipping clip.");
+           continue;
+        }
+
+        bool usesExternal = originalToggleSpec.externalAnimations != null && originalToggleSpec.externalAnimations.Count > 0;
+
+        if (usesExternal) {
+          var externalSpec = originalToggleSpec.externalAnimations[0];
+          string sourceClipPath = null;
+          bool isOffClip = finalClipName.EndsWith("_Off") || finalClipName.EndsWith("_Independent_Off") || finalClipName.EndsWith("_Dependent_Off");
+
+          sourceClipPath = isOffClip ? externalSpec.offClipPath : externalSpec.onClipPath;
+
+          if (string.IsNullOrEmpty(sourceClipPath)) {
+            Debug.LogError($"Toggle '{originalToggleSpec.name}' (Param: '{baseParamName}'): External clip path is missing for '{finalClipName}'. Skipping clip.");
+            continue;
+          }
+
+          AnimationClip sourceClip = AssetDatabase.LoadAssetAtPath<AnimationClip>(sourceClipPath);
+          if (sourceClip == null) {
+              Debug.LogError($"Toggle '{originalToggleSpec.name}' (Param: '{baseParamName}'): Failed to load source external animation clip '{finalClipName}' at path: {sourceClipPath}. Skipping clip.");
+              continue;
+          }
+
+          AnimationClip clipToUse = null;
+
+          if (externalSpec.mirror) {
+             // Generate mirrored clip in memory
+             Debug.Log($"Generating in-memory mirrored clip for '{sourceClip.name}' used by '{finalClipName}'");
+             try {
+               clipToUse = MirrorAnimationClipInMemory(sourceClip);
+               if (clipToUse == null) {
+                  Debug.LogError($"Failed to generate in-memory mirrored clip for '{sourceClip.name}'. Using source clip instead.");
+                  clipToUse = sourceClip; // Fallback to source
+               } else {
+                  Debug.Log($"Successfully generated in-memory mirrored clip for '{sourceClip.name}'");
+               }
+             } catch (Exception e) {
+                Debug.LogError($"Error generating in-memory mirrored clip for '{sourceClip.name}': {e.Message}. Using source clip instead.");
+                clipToUse = sourceClip; // Fallback to source on error
+             }
+          } else {
+             // Not mirrored, use the loaded source clip directly
+             clipToUse = sourceClip;
+             Debug.Log($"Using external clip '{finalClipName}' for toggle '{originalToggleSpec.name}' from path: {sourceClipPath}");
+          }
+
+          if (clipToUse != null) {
+             // Important: Assign a unique name to the in-memory clip instance if it was mirrored,
+             // otherwise Unity might get confused if multiple states reference the same in-memory clip object.
+             // We use the finalClipName which should be unique within the context of this generator run.
+             clipToUse.name = finalClipName;
+             animationClips[finalClipName] = clipToUse;
+          }
+
+        } else {
+          // Generate internal clip using the potentially modified GeneratedAnimationClipConfig
+          AnimationClip internalClip = CreateAnimationClipFromConfig(finalAnimConfig); // Pass the final config
+          // Ensure the internal clip also has a unique name matching its key
+          internalClip.name = finalClipName;
+          animationClips[finalClipName] = internalClip;
+          Debug.Log($"Generated internal clip '{finalClipName}' for toggle '{originalToggleSpec.name}'");
+        }
+      }
+      Debug.Log("--- Finished Preparing Final Animation Clips ---");
+
       // Create actual assets.
       GenerateVRChatAssets(config.toggles, vrcParams, vrcMenu);
-      CreateAnimationClips(new GeneratedAnimationsConfig { animations = genAnimatorConfig.animations });
-      AnimatorController controller = GenerateAnimatorController(genAnimatorConfig);
+      AnimatorController controller = GenerateAnimatorController(genAnimatorConfig); // Pass the final config
 
       Debug.Log("=== Animator Generation Process Complete ===");
       return controller;
@@ -608,125 +715,142 @@ namespace YOTS
     }
 
     private static GeneratedAnimationsConfig GenerateAnimationConfig(List<ToggleSpec> toggleSpecs) {
+      // This function is now only used to populate the initial GeneratedAnimatorConfig.
+      // The actual clip creation or loading happens later in GenerateAnimator.
       GeneratedAnimationsConfig genAnimConfig = new GeneratedAnimationsConfig();
       foreach (var toggle in toggleSpecs) {
         string paramName = toggle.GetParameterName();
-        
-        GeneratedAnimationClipConfig onAnim = new GeneratedAnimationClipConfig();
-        onAnim.name = paramName + "_On";
-        if (toggle.meshToggles != null) {
-          foreach (var mesh in toggle.meshToggles) {
-            onAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 1.0f });
-          }
-        }
-        if (toggle.blendShapes != null) {
-          foreach (var bs in toggle.blendShapes) {
-            onAnim.blendShapes.Add(new GeneratedBlendShape{
-              path = bs.path,
-              blendShape = bs.blendShape,
-              value = bs.onValue
-            });
-          }
-        }
-        // Add shader toggles
-        if (toggle.shaderToggles != null) {
-          foreach (var st in toggle.shaderToggles) {
-            // Validate that at least one path is provided
-            if (string.IsNullOrEmpty(st.path) && (st.paths == null || st.paths.Count == 0)) {
-              throw new ArgumentException($"Shader toggle in '{toggle.name}' must specify either 'path' or 'paths'");
-            }
 
-            // Handle single path
-            if (!string.IsNullOrEmpty(st.path)) {
-              onAnim.shaderToggles.Add(new GeneratedShaderToggle {
-                path = st.path,
-                materialProperty = st.materialProperty,
-                value = st.onValue,
-                rendererType = st.rendererType
-              });
-            }
-            // Handle multiple paths
-            if (st.paths != null) {
-              foreach (var path in st.paths) {
-                onAnim.shaderToggles.Add(new GeneratedShaderToggle {
-                  path = path,
-                  materialProperty = st.materialProperty,
-                  value = st.onValue,
-                  rendererType = st.rendererType
-                });
-              }
-            }
-          }
-        }
-        // Add parent constraint weights
-        if (toggle.parentConstraintWeights != null) {
-          foreach (var pc in toggle.parentConstraintWeights) {
-            onAnim.parentConstraintWeights.Add(new GeneratedParentConstraint {
-              path = pc.path,
-              value = pc.onValue
-            });
-          }
-        }
-        genAnimConfig.animations.Add(onAnim);
-
-        GeneratedAnimationClipConfig offAnim = new GeneratedAnimationClipConfig();
-        offAnim.name = paramName + "_Off";
-        if (toggle.meshToggles != null) {
-          foreach (var mesh in toggle.meshToggles) {
-            offAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 0.0f });
-          }
-        }
-        if (toggle.blendShapes != null) {
-          foreach (var bs in toggle.blendShapes) {
-            offAnim.blendShapes.Add(new GeneratedBlendShape{
-              path = bs.path,
-              blendShape = bs.blendShape,
-              value = bs.offValue
-            });
-          }
-        }
-        // Add shader toggles
-        if (toggle.shaderToggles != null) {
-          foreach (var st in toggle.shaderToggles) {
-            // Validate that at least one path is provided
-            if (string.IsNullOrEmpty(st.path) && (st.paths == null || st.paths.Count == 0)) {
-              throw new ArgumentException($"Shader toggle in '{toggle.name}' must specify either 'path' or 'paths'");
-            }
-
-            // Handle single path
-            if (!string.IsNullOrEmpty(st.path)) {
-              offAnim.shaderToggles.Add(new GeneratedShaderToggle {
-                path = st.path,
-                materialProperty = st.materialProperty,
-                value = st.offValue,
-                rendererType = st.rendererType
-              });
-            }
-            // Handle multiple paths
-            if (st.paths != null) {
-              foreach (var path in st.paths) {
-                offAnim.shaderToggles.Add(new GeneratedShaderToggle {
-                  path = path,
-                  materialProperty = st.materialProperty,
-                  value = st.offValue,
-                  rendererType = st.rendererType
-                });
-              }
-            }
-          }
-        }
-        // Add parent constraint weights
-        if (toggle.parentConstraintWeights != null) {
-          foreach (var pc in toggle.parentConstraintWeights) {
-            offAnim.parentConstraintWeights.Add(new GeneratedParentConstraint {
-              path = pc.path,
-              value = pc.offValue
-            });
-          }
-        }
-        genAnimConfig.animations.Add(offAnim);
+        // We still create dummy entries here so ApplyIndependentFixToAnimatorConfig etc. have something to work with.
+        // The *content* of these might not be used if external clips are provided.
+        var (onConfig, offConfig) = GenerateSingleToggleAnimationConfigs(toggle);
+        genAnimConfig.animations.Add(onConfig);
+        genAnimConfig.animations.Add(offConfig);
       }
       return genAnimConfig;
+    }
+
+    private static (GeneratedAnimationClipConfig onConfig, GeneratedAnimationClipConfig offConfig)
+        GenerateSingleToggleAnimationConfigs(ToggleSpec toggle) {
+      string paramName = toggle.GetParameterName();
+
+      GeneratedAnimationClipConfig onAnim = new GeneratedAnimationClipConfig();
+      onAnim.name = paramName + "_On";
+      if (toggle.meshToggles != null) {
+        foreach (var mesh in toggle.meshToggles) {
+          onAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 1.0f });
+        }
+      }
+      if (toggle.blendShapes != null) {
+        foreach (var bs in toggle.blendShapes) {
+          onAnim.blendShapes.Add(new GeneratedBlendShape{
+            path = bs.path,
+            blendShape = bs.blendShape,
+            value = bs.onValue
+          });
+        }
+      }
+      if (toggle.shaderToggles != null) {
+        foreach (var st in toggle.shaderToggles) {
+          if (string.IsNullOrEmpty(st.path) && (st.paths == null || st.paths.Count == 0)) {
+            throw new ArgumentException($"Shader toggle in '{toggle.name}' must specify either 'path' or 'paths'");
+          }
+          if (!string.IsNullOrEmpty(st.path)) {
+            onAnim.shaderToggles.Add(new GeneratedShaderToggle {
+              path = st.path, materialProperty = st.materialProperty, value = st.onValue, rendererType = st.rendererType
+            });
+          }
+          if (st.paths != null) {
+            foreach (var path in st.paths) {
+              onAnim.shaderToggles.Add(new GeneratedShaderToggle {
+                path = path, materialProperty = st.materialProperty, value = st.onValue, rendererType = st.rendererType
+              });
+            }
+          }
+        }
+      }
+      if (toggle.parentConstraintWeights != null) {
+        foreach (var pc in toggle.parentConstraintWeights) {
+          onAnim.parentConstraintWeights.Add(new GeneratedParentConstraint { path = pc.path, value = pc.onValue });
+        }
+      }
+
+      GeneratedAnimationClipConfig offAnim = new GeneratedAnimationClipConfig();
+      offAnim.name = paramName + "_Off";
+      if (toggle.meshToggles != null) {
+        foreach (var mesh in toggle.meshToggles) {
+          offAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 0.0f });
+        }
+      }
+      if (toggle.blendShapes != null) {
+        foreach (var bs in toggle.blendShapes) {
+          offAnim.blendShapes.Add(new GeneratedBlendShape{
+            path = bs.path, blendShape = bs.blendShape, value = bs.offValue
+          });
+        }
+      }
+      if (toggle.shaderToggles != null) {
+        foreach (var st in toggle.shaderToggles) {
+           if (string.IsNullOrEmpty(st.path) && (st.paths == null || st.paths.Count == 0)) {
+            throw new ArgumentException($"Shader toggle in '{toggle.name}' must specify either 'path' or 'paths'");
+          }
+          if (!string.IsNullOrEmpty(st.path)) {
+            offAnim.shaderToggles.Add(new GeneratedShaderToggle {
+              path = st.path, materialProperty = st.materialProperty, value = st.offValue, rendererType = st.rendererType
+            });
+          }
+          if (st.paths != null) {
+            foreach (var path in st.paths) {
+              offAnim.shaderToggles.Add(new GeneratedShaderToggle {
+                path = path, materialProperty = st.materialProperty, value = st.offValue, rendererType = st.rendererType
+              });
+            }
+          }
+        }
+      }
+      if (toggle.parentConstraintWeights != null) {
+        foreach (var pc in toggle.parentConstraintWeights) {
+          offAnim.parentConstraintWeights.Add(new GeneratedParentConstraint { path = pc.path, value = pc.offValue });
+        }
+      }
+
+      return (onAnim, offAnim);
+    }
+
+    private static AnimationClip CreateAnimationClipFromConfig(GeneratedAnimationClipConfig clipConfig) {
+      AnimationClip newClip = new AnimationClip();
+      newClip.name = clipConfig.name;
+
+      // Apply mesh toggles
+      foreach (var meshToggle in clipConfig.meshToggles) {
+        AnimationCurve curve = new AnimationCurve(new Keyframe(0, meshToggle.value));
+        EditorCurveBinding binding = EditorCurveBinding.FloatCurve(meshToggle.path, typeof(GameObject), "m_IsActive");
+        AnimationUtility.SetEditorCurve(newClip, binding, curve);
+      }
+
+      // Apply blend shapes
+      foreach (var blendShape in clipConfig.blendShapes) {
+        AnimationCurve curve = AnimationCurve.Constant(0, 0, blendShape.value);
+        EditorCurveBinding binding = EditorCurveBinding.FloatCurve(blendShape.path, typeof(SkinnedMeshRenderer), "blendShape." + blendShape.blendShape);
+        AnimationUtility.SetEditorCurve(newClip, binding, curve);
+      }
+
+      // Apply shader toggles
+      foreach (var shaderToggle in clipConfig.shaderToggles) {
+        AnimationCurve curve = AnimationCurve.Constant(0, 0, shaderToggle.value);
+        Type rendererType = shaderToggle.rendererType == "MeshRenderer" ? typeof(MeshRenderer) : typeof(SkinnedMeshRenderer);
+        EditorCurveBinding binding = EditorCurveBinding.FloatCurve(shaderToggle.path, rendererType, $"material.{shaderToggle.materialProperty}");
+        AnimationUtility.SetEditorCurve(newClip, binding, curve);
+      }
+
+      // Apply parent constraint weights
+      foreach (var parentConstraint in clipConfig.parentConstraintWeights) {
+        AnimationCurve curve = AnimationCurve.Constant(0, 0, parentConstraint.value);
+        EditorCurveBinding binding = EditorCurveBinding.FloatCurve(parentConstraint.path, typeof(UnityEngine.Animations.ParentConstraint), "m_Weight");
+        AnimationUtility.SetEditorCurve(newClip, binding, curve);
+      }
+
+      return newClip;
     }
 
     private static GeneratedAnimatorConfig ApplyIndependentFixToAnimatorConfig(GeneratedAnimatorConfig genAnimatorConfig) {
@@ -1185,6 +1309,77 @@ namespace YOTS
           });
         }
       }
+    }
+
+    private static AnimationClip MirrorAnimationClipInMemory(AnimationClip sourceClip) {
+        if (sourceClip == null) {
+            Debug.LogError("Cannot mirror a null AnimationClip.");
+            return null;
+        }
+
+        // Create a new clip instance in memory
+        AnimationClip mirroredClip = new AnimationClip();
+        // Set a base name; the calling code will set a more specific final name
+        mirroredClip.name = sourceClip.name + "_Mirrored_InMemory";
+
+        EditorCurveBinding[] bindings = AnimationUtility.GetCurveBindings(sourceClip);
+
+        foreach (var binding in bindings) {
+            // Curves are value types (structs), copying them is fine.
+            AnimationCurve curve = AnimationUtility.GetEditorCurve(sourceClip, binding);
+            if (curve == null) continue;
+
+            EditorCurveBinding mirroredBinding = binding; // Start with original
+
+            // 1. Mirror Path
+            string mirroredPath = binding.path;
+            mirroredPath = Regex.Replace(mirroredPath, @"\bLeft\b", "TEMP_RIGHT_MARKER");
+            mirroredPath = Regex.Replace(mirroredPath, @"\bRight\b", "Left");
+            mirroredPath = mirroredPath.Replace("TEMP_RIGHT_MARKER", "Right");
+
+            mirroredPath = Regex.Replace(mirroredPath, @"\.L\b", ".TEMP_R_MARKER");
+            mirroredPath = Regex.Replace(mirroredPath, @"\.R\b", ".L");
+            mirroredPath = mirroredPath.Replace(".TEMP_R_MARKER", ".R");
+
+            mirroredPath = Regex.Replace(mirroredPath, @"_L\b", "_TEMP_R_MARKER");
+            mirroredPath = Regex.Replace(mirroredPath, @"_R\b", "_L");
+            mirroredPath = mirroredPath.Replace("_TEMP_R_MARKER", "_R");
+
+            mirroredBinding.path = mirroredPath;
+
+            // 2. Mirror Property Name
+            string mirroredPropertyName = binding.propertyName;
+            mirroredPropertyName = Regex.Replace(mirroredPropertyName, @"\bLeft\b", "TEMP_RIGHT_MARKER");
+            mirroredPropertyName = Regex.Replace(mirroredPropertyName, @"\bRight\b", "Left");
+            mirroredPropertyName = mirroredPropertyName.Replace("TEMP_RIGHT_MARKER", "Right");
+            mirroredBinding.propertyName = mirroredPropertyName;
+
+            Debug.Log($"Saw binding: {binding.path} // {binding.propertyName}");
+
+            // 3. Mirror Curve Values
+            bool valueNeedsNegating = false;
+            if (binding.propertyName == "m_LocalPosition.x") valueNeedsNegating = true;
+            if (binding.propertyName == "m_LocalRotation.y" || binding.propertyName == "m_LocalRotation.z") valueNeedsNegating = true;
+            if (binding.propertyName == "localEulerAnglesRaw.y" || binding.propertyName == "localEulerAnglesRaw.z") valueNeedsNegating = true;
+            if (binding.propertyName == "m_LocalScale.x") valueNeedsNegating = true;
+
+            if (valueNeedsNegating) {
+                Keyframe[] keys = curve.keys;
+                for (int i = 0; i < keys.Length; i++) {
+                    keys[i].value *= -1f;
+                    keys[i].inTangent *= -1f;
+                    keys[i].outTangent *= -1f;
+                }
+                // Create a new curve with modified keys, as AnimationCurve is a class but behaves like a value type here.
+                curve = new AnimationCurve(keys);
+            }
+
+            // Set the potentially modified curve on the mirrored clip
+            AnimationUtility.SetEditorCurve(mirroredClip, mirroredBinding, curve);
+        }
+
+        // Return the clip object without saving it
+        return mirroredClip;
     }
   }
 }
