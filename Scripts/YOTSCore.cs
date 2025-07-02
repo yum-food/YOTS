@@ -26,6 +26,11 @@ namespace YOTS
     [SerializeField]
     public string type = "toggle";
 
+    // The name of the parameter to use.
+    // If not specified, the name will be generated from the menuPath and name.
+    [SerializeField]
+    public string parameterName;
+
     // Dependencies are toggles that will be evaluated before this one. If
     // you have two toggles which animate the same thing, one must depend
     // on the other.
@@ -89,6 +94,12 @@ namespace YOTS
 
     // Get the effective parameter name, generating one if not specified
     public string GetParameterName() {
+      // Use explicit parameter name if provided
+      if (!string.IsNullOrEmpty(parameterName)) {
+        return parameterName;
+      }
+      
+      // Otherwise, generate one based on menu structure
       if (disableMenuEntry) {
         return name;
       }
@@ -108,6 +119,9 @@ namespace YOTS
     // For example, "Body" or "Shirt".
     [SerializeField]
     public string path;
+
+    [SerializeField]
+    public List<string> paths = new List<string>();
 
     // The value of the blendshape when the toggle is off. Range from 0-100.
     [SerializeField]
@@ -245,6 +259,8 @@ namespace YOTS
   public class AnimatorDirectBlendTreeEntry {
     public string name;       // animation name
     public string parameter;  // parameter driving the animation
+    public float offThreshold = 0.0f;  // threshold for off animation
+    public float onThreshold = 1.0f;   // threshold for on animation
   }
 
   // Add these new classes at the namespace level
@@ -315,26 +331,33 @@ namespace YOTS
       animationClips.Clear();
       Debug.Log("--- Preparing Final Animation Clips ---");
 
-      Dictionary<string, ToggleSpec> toggleSpecLookup = config.toggles
-          .GroupBy(t => t.GetParameterName())
-          .ToDictionary(g => g.Key, g => g.First());
+      // Create lookup from animation name to toggle spec
+      Dictionary<string, ToggleSpec> animNameToToggleSpec = new Dictionary<string, ToggleSpec>();
+      foreach (var toggle in config.toggles) {
+        string paramName = toggle.GetParameterName();
+        string animName = paramName;
+        if (config.toggles.Count(t => t.GetParameterName() == paramName) > 1) {
+          animName = paramName + "_" + toggle.name;
+        }
+        animNameToToggleSpec[animName] = toggle;
+      }
 
       // Iterate through the FINAL animation configurations after potential renaming/splitting
       foreach (var finalAnimConfig in genAnimatorConfig.animations) {
         string finalClipName = finalAnimConfig.name;
 
-        // Determine the original base parameter name from the final clip name
-        string baseParamName = finalClipName;
+        // Determine the original base animation name from the final clip name
+        string baseAnimName = finalClipName;
         string[] suffixes = { "_Independent_On", "_Independent_Off", "_Dependent_On", "_Dependent_Off", "_On", "_Off" };
         foreach(var suffix in suffixes) {
-          if (baseParamName.EndsWith(suffix)) {
-            baseParamName = baseParamName.Substring(0, baseParamName.Length - suffix.Length);
+          if (baseAnimName.EndsWith(suffix)) {
+            baseAnimName = baseAnimName.Substring(0, baseAnimName.Length - suffix.Length);
             break;
           }
         }
 
-        if (!toggleSpecLookup.TryGetValue(baseParamName, out ToggleSpec originalToggleSpec)) {
-           Debug.LogError($"Could not find original ToggleSpec for parameter name '{baseParamName}' derived from animation clip '{finalClipName}'. Skipping clip.");
+        if (!animNameToToggleSpec.TryGetValue(baseAnimName, out ToggleSpec originalToggleSpec)) {
+           Debug.LogError($"Could not find original ToggleSpec for animation name '{baseAnimName}' derived from animation clip '{finalClipName}'. Skipping clip.");
            continue;
         }
 
@@ -348,13 +371,13 @@ namespace YOTS
           sourceClipPath = isOffClip ? externalSpec.offClipPath : externalSpec.onClipPath;
 
           if (string.IsNullOrEmpty(sourceClipPath)) {
-            Debug.LogError($"Toggle '{originalToggleSpec.name}' (Param: '{baseParamName}'): External clip path is missing for '{finalClipName}'. Skipping clip.");
+            Debug.LogError($"Toggle '{originalToggleSpec.name}' (Param: '{originalToggleSpec.GetParameterName()}'): External clip path is missing for '{finalClipName}'. Skipping clip.");
             continue;
           }
 
           AnimationClip sourceClip = AssetDatabase.LoadAssetAtPath<AnimationClip>(sourceClipPath);
           if (sourceClip == null) {
-              Debug.LogError($"Toggle '{originalToggleSpec.name}' (Param: '{baseParamName}'): Failed to load source external animation clip '{finalClipName}' at path: {sourceClipPath}. Skipping clip.");
+              Debug.LogError($"Toggle '{originalToggleSpec.name}' (Param: '{originalToggleSpec.GetParameterName()}'): Failed to load source external animation clip '{finalClipName}' at path: {sourceClipPath}. Skipping clip.");
               continue;
           }
 
@@ -501,45 +524,64 @@ namespace YOTS
       rootBlendTree.name = "YOTS_BaseLayer_RootBlendTree";
       rootBlendTree.blendType = BlendTreeType.Direct;
 
-      var parameterGroups = baseLayerConfig.directBlendTree.entries
-        .GroupBy(e => e.parameter)
-        .ToDictionary(g => g.Key, g => g.ToList());
+      // Group animations by their base name (without _On/_Off suffix) to pair them
+      var animationPairs = new Dictionary<string, List<AnimatorDirectBlendTreeEntry>>();
+      foreach (var entry in baseLayerConfig.directBlendTree.entries) {
+        string baseName = entry.name;
+        if (baseName.EndsWith("_On"))
+          baseName = baseName.Substring(0, baseName.Length - "_On".Length);
+        else if (baseName.EndsWith("_Off"))
+          baseName = baseName.Substring(0, baseName.Length - "_Off".Length);
+        
+        if (!animationPairs.ContainsKey(baseName))
+          animationPairs[baseName] = new List<AnimatorDirectBlendTreeEntry>();
+        animationPairs[baseName].Add(entry);
+      }
 
-      // Iterate over (parameter, animationSet) pairs in the base layer.
-      foreach (var group in parameterGroups) {
-        var param = group.Key;
-        var animations = group.Value;
-
-        // Find the corresponding AnimatorParameterSetting to get thresholds
-        var paramSetting = animatorConfig.parameters.FirstOrDefault(p => p.name == param);
-        if (paramSetting == null) {
-          // This should not happen if GenerateNaiveAnimatorConfig worked correctly
-          Debug.LogError($"Could not find AnimatorParameterSetting for parameter: {param} while building base layer blend tree.");
-          continue; // Skip this parameter if settings are missing
-        }
+      // Create a blend tree for each animation pair
+      foreach (var pair in animationPairs) {
+        var animations = pair.Value;
+        if (animations.Count == 0) continue;
+        
+        // Get thresholds from the first animation (they should all be the same for this pair)
+        var firstAnim = animations[0];
+        var param = firstAnim.parameter;
+        float offThreshold = firstAnim.offThreshold;
+        float onThreshold = firstAnim.onThreshold;
 
         // Create a blendtree controlled by this toggle's parameter.
         var paramBlendTree = new BlendTree();
-        paramBlendTree.name = $"YOTS_BlendTree_{param}";
+        paramBlendTree.name = $"YOTS_BlendTree_{pair.Key}";
         paramBlendTree.blendType = BlendTreeType.Simple1D;
         paramBlendTree.blendParameter = param;
-        // Use thresholds from the parameter settings
-        paramBlendTree.minThreshold = paramSetting.offThreshold;
-        paramBlendTree.maxThreshold = paramSetting.onThreshold;
-        paramBlendTree.useAutomaticThresholds = false; // Ensure manual thresholds are used
+        
+        // Handle inverted thresholds (e.g., offThreshold=0.5, onThreshold=0.0)
+        float minThreshold = Mathf.Min(offThreshold, onThreshold);
+        float maxThreshold = Mathf.Max(offThreshold, onThreshold);
+        paramBlendTree.minThreshold = minThreshold;
+        paramBlendTree.maxThreshold = maxThreshold;
+        paramBlendTree.useAutomaticThresholds = false;
 
         var children = new List<ChildMotion>();
-        foreach (var animation in animations.OrderBy(e => e.name.EndsWith("_On"))) {
-          Debug.Log("Adding child motion for: " + animation.name);
+        
+        // Build list of animations with their thresholds
+        var animsWithThresholds = new List<(AnimatorDirectBlendTreeEntry entry, float threshold)>();
+        foreach (var animation in animations) {
+          float threshold = animation.name.EndsWith("_On") ? onThreshold : offThreshold;
+          animsWithThresholds.Add((animation, threshold));
+        }
+        
+        // Sort by threshold value (ascending) to ensure Unity interpolates correctly
+        foreach (var (animation, threshold) in animsWithThresholds.OrderBy(a => a.threshold)) {
+          Debug.Log($"Adding child motion for: {animation.name} at threshold {threshold}");
           if (!animationClips.TryGetValue(animation.name, out AnimationClip clip)) {
             throw new InvalidOperationException($"Animation clip not found in memory: {animation.name}");
           }
 
-          // Use thresholds from paramSetting for each child motion
           children.Add(new ChildMotion{
             motion = clip,
             timeScale = 1f,
-            threshold = animation.name.EndsWith("_On") ? paramSetting.onThreshold : paramSetting.offThreshold
+            threshold = threshold
           });
         }
         paramBlendTree.children = children.ToArray();
@@ -609,29 +651,43 @@ namespace YOTS
     }
 
     private static Dictionary<string, int> TopologicalSortToggles(List<ToggleSpec> toggleSpecs) {
+      // Group toggles by parameter name to handle shared parameters
+      var togglesByParam = toggleSpecs
+        .GroupBy(t => t.GetParameterName())
+        .ToDictionary(g => g.Key, g => g.ToList());
+      
       // Get mapping from toggle parameter name to children
       Dictionary<string, HashSet<string>> graph = new Dictionary<string, HashSet<string>>();
-      foreach (var toggle in toggleSpecs) {
-        string paramName = toggle.GetParameterName();
+      Dictionary<string, HashSet<string>> dependencyNames = new Dictionary<string, HashSet<string>>();
+      
+      foreach (var paramGroup in togglesByParam) {
+        string paramName = paramGroup.Key;
         if (!graph.ContainsKey(paramName))
           graph[paramName] = new HashSet<string>();
-        foreach (var dep in toggle.dependencies) {
-          // Find the toggle with this dependency name
-          var depToggle = toggleSpecs.FirstOrDefault(t => t.name == dep);
-          if (depToggle == null) {
-            throw new System.Exception($"Toggle '{toggle.name}' has dependency '{dep}' that doesn't exist");
+        if (!dependencyNames.ContainsKey(paramName))
+          dependencyNames[paramName] = new HashSet<string>();
+          
+        // Collect all dependencies from all toggles that share this parameter
+        foreach (var toggle in paramGroup.Value) {
+          foreach (var dep in toggle.dependencies) {
+            // Find the toggle with this dependency name
+            var depToggle = toggleSpecs.FirstOrDefault(t => t.name == dep);
+            if (depToggle == null) {
+              throw new System.Exception($"Toggle '{toggle.name}' has dependency '{dep}' that doesn't exist");
+            }
+            string depParamName = depToggle.GetParameterName();
+            if (!graph.ContainsKey(depParamName))
+              graph[depParamName] = new HashSet<string>();
+            graph[depParamName].Add(paramName);
+            dependencyNames[paramName].Add(dep);
           }
-          string depParamName = depToggle.GetParameterName();
-          if (!graph.ContainsKey(depParamName))
-            graph[depParamName] = new HashSet<string>();
-          graph[depParamName].Add(paramName);
         }
       }
 
       Dictionary<string, int> inDegree = new Dictionary<string, int>();
-      foreach (var toggle in toggleSpecs) {
-        string paramName = toggle.GetParameterName();
-        inDegree[paramName] = toggle.dependencies.Count;
+      foreach (var paramGroup in togglesByParam) {
+        string paramName = paramGroup.Key;
+        inDegree[paramName] = dependencyNames[paramName].Count;
       }
 
       Dictionary<string, int> depths = new Dictionary<string, int>();
@@ -661,12 +717,24 @@ namespace YOTS
         }
       }
 
-      if (processedNodes != toggleSpecs.Count) {
-        var cycleNodes = toggleSpecs
-          .Where(t => !depths.ContainsKey(t.GetParameterName()))
-          .Select(t => t.name)
+      // Check if all unique parameter names were processed
+      if (processedNodes != togglesByParam.Count) {
+        var unprocessedParams = togglesByParam.Keys
+          .Where(p => !depths.ContainsKey(p))
           .ToList();
-        throw new System.Exception($"Dependency cycle detected in toggle specifications. Nodes involved: {string.Join(", ", cycleNodes)}");
+        
+        // Collect all toggle names that are part of the cycle
+        var cycleNodes = new List<string>();
+        foreach (var param in unprocessedParams) {
+          cycleNodes.AddRange(togglesByParam[param].Select(t => t.name));
+        }
+        
+        // Provide detailed error message
+        if (cycleNodes.Count == 0) {
+          throw new System.Exception($"Dependency cycle detected but couldn't identify specific nodes. Unprocessed parameters: {string.Join(", ", unprocessedParams)}");
+        } else {
+          throw new System.Exception($"Dependency cycle detected in toggle specifications. Nodes involved: {string.Join(", ", cycleNodes)}");
+        }
       }
 
       return depths;
@@ -696,14 +764,25 @@ namespace YOTS
               onThreshold = toggle.onThreshold
             });
 
+          // Use a unique name for animations when toggles share parameters
+          string animName = paramName;
+          if (toggleSpecs.Count(t => t.GetParameterName() == paramName) > 1) {
+            // Make animation names unique by including toggle name
+            animName = paramName + "_" + toggle.name;
+          }
+
           layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-            name = paramName + "_On",
-            parameter = paramName
+            name = animName + "_On",
+            parameter = paramName,
+            offThreshold = toggle.offThreshold,
+            onThreshold = toggle.onThreshold
           });
 
           layer.directBlendTree.entries.Add(new AnimatorDirectBlendTreeEntry{
-            name = paramName + "_Off",
-            parameter = paramName
+            name = animName + "_Off",
+            parameter = paramName,
+            offThreshold = toggle.offThreshold,
+            onThreshold = toggle.onThreshold
           });
         }
         genAnimatorConfig.layers.Add(layer);
@@ -720,10 +799,17 @@ namespace YOTS
       GeneratedAnimationsConfig genAnimConfig = new GeneratedAnimationsConfig();
       foreach (var toggle in toggleSpecs) {
         string paramName = toggle.GetParameterName();
+        
+        // Use a unique name for animations when toggles share parameters
+        string animName = paramName;
+        if (toggleSpecs.Count(t => t.GetParameterName() == paramName) > 1) {
+          // Make animation names unique by including toggle name
+          animName = paramName + "_" + toggle.name;
+        }
 
         // We still create dummy entries here so ApplyIndependentFixToAnimatorConfig etc. have something to work with.
         // The *content* of these might not be used if external clips are provided.
-        var (onConfig, offConfig) = GenerateSingleToggleAnimationConfigs(toggle);
+        var (onConfig, offConfig) = GenerateSingleToggleAnimationConfigs(toggle, animName);
         genAnimConfig.animations.Add(onConfig);
         genAnimConfig.animations.Add(offConfig);
       }
@@ -731,11 +817,11 @@ namespace YOTS
     }
 
     private static (GeneratedAnimationClipConfig onConfig, GeneratedAnimationClipConfig offConfig)
-        GenerateSingleToggleAnimationConfigs(ToggleSpec toggle) {
+        GenerateSingleToggleAnimationConfigs(ToggleSpec toggle, string animName) {
       string paramName = toggle.GetParameterName();
 
       GeneratedAnimationClipConfig onAnim = new GeneratedAnimationClipConfig();
-      onAnim.name = paramName + "_On";
+      onAnim.name = animName + "_On";
       if (toggle.meshToggles != null) {
         foreach (var mesh in toggle.meshToggles) {
           onAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 1.0f });
@@ -743,11 +829,30 @@ namespace YOTS
       }
       if (toggle.blendShapes != null) {
         foreach (var bs in toggle.blendShapes) {
+          // Validate that either path or paths is specified
+          if (string.IsNullOrEmpty(bs.path) && (bs.paths == null || bs.paths.Count == 0)) {
+            throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'path' or 'paths'");
+          }
+          
+          // Handle single path
+          if (!string.IsNullOrEmpty(bs.path)) {
           onAnim.blendShapes.Add(new GeneratedBlendShape{
             path = bs.path,
             blendShape = bs.blendShape,
             value = bs.onValue
           });
+          }
+          
+          // Handle multiple paths
+          if (bs.paths != null) {
+            foreach (var path in bs.paths) {
+              onAnim.blendShapes.Add(new GeneratedBlendShape{
+                path = path,
+                blendShape = bs.blendShape,
+                value = bs.onValue
+              });
+            }
+          }
         }
       }
       if (toggle.shaderToggles != null) {
@@ -776,7 +881,7 @@ namespace YOTS
       }
 
       GeneratedAnimationClipConfig offAnim = new GeneratedAnimationClipConfig();
-      offAnim.name = paramName + "_Off";
+      offAnim.name = animName + "_Off";
       if (toggle.meshToggles != null) {
         foreach (var mesh in toggle.meshToggles) {
           offAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 0.0f });
@@ -784,9 +889,30 @@ namespace YOTS
       }
       if (toggle.blendShapes != null) {
         foreach (var bs in toggle.blendShapes) {
-          offAnim.blendShapes.Add(new GeneratedBlendShape{
-            path = bs.path, blendShape = bs.blendShape, value = bs.offValue
-          });
+          // Validate that either path or paths is specified
+          if (string.IsNullOrEmpty(bs.path) && (bs.paths == null || bs.paths.Count == 0)) {
+            throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'path' or 'paths'");
+          }
+          
+          // Handle single path
+          if (!string.IsNullOrEmpty(bs.path)) {
+            offAnim.blendShapes.Add(new GeneratedBlendShape{
+              path = bs.path,
+              blendShape = bs.blendShape,
+              value = bs.offValue
+            });
+          }
+          
+          // Handle multiple paths
+          if (bs.paths != null) {
+            foreach (var path in bs.paths) {
+              offAnim.blendShapes.Add(new GeneratedBlendShape{
+                path = path,
+                blendShape = bs.blendShape,
+                value = bs.offValue
+              });
+            }
+          }
         }
       }
       if (toggle.shaderToggles != null) {

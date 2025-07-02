@@ -128,8 +128,8 @@ namespace YOTS
           // Else append the generated animator to the original.
           AnimatorController originalController = originalAnimator as AnimatorController;
           AnimatorController generatedController = generatedAnimator as AnimatorController;
-          MergeAnimatorControllers(localizer, originalController, generatedController);
-          descriptor.baseAnimationLayers[4].animatorController = originalController;
+          MergeAnimatorControllers(localizer, generatedController, originalController);
+          descriptor.baseAnimationLayers[4].animatorController = generatedController;
         });
     }
 
