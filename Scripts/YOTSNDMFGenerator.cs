@@ -17,18 +17,30 @@ using UnityEditor.Animations;
 namespace YOTS
 {
   public class YOTSNDMFGenerator : Plugin<YOTSNDMFGenerator> {
-    private readonly Localizer localizer = new Localizer("en-us", () =>
+    private readonly Localizer lcl = new Localizer("en-us", () =>
         new List<(string, Func<string, string>)> {
-        ("en-us", key => key)
+        ("en-us", key => {
+          switch (key) {
+            case "json_missing": return "YOTS configuration JSON file is missing";
+            case "config_missing": return "YOTS config component not found on avatar";
+            case "descriptor_missing": return "VRC Avatar Descriptor is missing from avatar";
+            case "expressions_missing": return "Avatar is missing Expression Parameters or Expression Menu";
+            case "param_exists": return "Parameter '{0}' already exists in FX animator";
+            case "layer_exists": return "Layer '{0}' already exists in FX animator";
+            case "config_error": return "{0}";
+            default: return null;
+          }
+        })
         });
 
     public override string DisplayName => "YOTS Animator Generator";
 
     protected override void Configure() {
-      // First pass: Retrieve and stash configuration
+      // First pass: Retrieve and stash configuration. By the time we're in the
+      // Transforming phase, we can no longer access the YOTSConfig object.
       InPhase(BuildPhase.Resolving)
         .Run("Cache YOTS Config", ctx => {
-          var config = ctx.AvatarRootObject.GetComponentInChildren<YOTSNDMFConfig>();
+          var config = ctx.AvatarRootObject.GetComponentInChildren<YOTSConfig>();
           if (config == null) {
             ctx.GetState<YOTSBuildState>().skipGeneration = true;
             Debug.Log("No YOTS config found - skipping.");
@@ -36,12 +48,8 @@ namespace YOTS
           }
           if (config.jsonConfig == null) {
             ctx.GetState<YOTSBuildState>().skipGeneration = true;
-            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
-                ErrorReport.ReportException(
-                    new Exception("No YOTS config found"), 
-                    "Missing required YOTS configuration"
-                );
-            });
+            ErrorReport.ReportError(lcl, ErrorSeverity.Error, "json_missing",
+                ctx.AvatarRootObject);
             return;
           }
           ctx.GetState<YOTSBuildState>().jsonConfig = config.jsonConfig.text;
@@ -57,45 +65,29 @@ namespace YOTS
             return;
           }
           if (config == null) {
-            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
-                ErrorReport.ReportException(
-                    new Exception("No YOTS config component found"), 
-                    "Missing required YOTS configuration"
-                );
-            });
+            ErrorReport.ReportError(lcl, ErrorSeverity.Error, "config_missing",
+                ctx.AvatarRootObject);
             return;
           }
           if (config.jsonConfig == null) {
-            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
-                ErrorReport.ReportException(
-                    new Exception("Missing JSON config file"), 
-                    "YOTS config component is missing required JSON configuration"
-                );
-            });
+            ErrorReport.ReportError(lcl, ErrorSeverity.Error, "json_missing",
+                ctx.AvatarRootObject);
             return;
           }
 
           // Get menu and parameters
           var descriptor = ctx.AvatarDescriptor;
           if (descriptor == null) {
-            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
-                ErrorReport.ReportException(
-                    new Exception("Avatar descriptor is missing"), 
-                    "Cannot find VRC Avatar Descriptor"
-                );
-            });
+            ErrorReport.ReportError(lcl, ErrorSeverity.Error, "descriptor_missing",
+                ctx.AvatarRootObject);
             return;
           }
           RuntimeAnimatorController originalAnimator = descriptor.baseAnimationLayers[4].animatorController;
           var menu = descriptor.expressionsMenu;
           var parameters = descriptor.expressionParameters;
           if (parameters == null || menu == null) {
-            ErrorReport.WithContextObject(descriptor, () => {
-                ErrorReport.ReportException(
-                    new Exception("Missing required VRC assets"), 
-                    "Avatar is missing required Expression Parameters or Menu"
-                );
-            });
+            ErrorReport.ReportError(lcl, ErrorSeverity.Error, "expressions_missing",
+                descriptor);
             return;
           }
           // Create copies so the originals don't get modified
@@ -105,18 +97,19 @@ namespace YOTS
           descriptor.expressionParameters = parameters;
 
           // Generate the YOTS animator.
-          RuntimeAnimatorController generatedAnimator = YOTSCore.GenerateAnimator(
-              config.jsonConfig,
-              parameters,
-              menu
-          );
-          if (generatedAnimator == null) {
-            ErrorReport.WithContextObject(ctx.AvatarRootObject, () => {
-                ErrorReport.ReportException(
-                    new Exception("Failed to generate animator"), 
-                    "YOTS animator generation failed"
-                );
-            });
+          RuntimeAnimatorController generatedAnimator = null;
+          try {
+            generatedAnimator = YOTSCore.GenerateAnimator(
+                config.jsonConfig,
+                parameters,
+                menu
+            );
+          } catch (ArgumentException e) {
+            ErrorReport.ReportError(lcl, ErrorSeverity.Error, "config_error",
+                e.Message, ctx.AvatarRootObject);
+            return;
+          } catch (Exception e) {
+            ErrorReport.ReportException(e);
             return;
           }
 
@@ -128,39 +121,33 @@ namespace YOTS
           // Else append the generated animator to the original.
           AnimatorController originalController = originalAnimator as AnimatorController;
           AnimatorController generatedController = generatedAnimator as AnimatorController;
-          MergeAnimatorControllers(localizer, generatedController, originalController);
+          MergeAnimatorControllers(originalController, generatedController);
           descriptor.baseAnimationLayers[4].animatorController = generatedController;
         });
     }
 
     // Simply append generated params and layers to the original animator.
-    private static void MergeAnimatorControllers(Localizer localizer, AnimatorController original, AnimatorController generated) {
-      // Merge parameters from generated into original.
-      foreach (var genParam in generated.parameters) {
+    private void MergeAnimatorControllers(AnimatorController from, AnimatorController to) {
+      // Merge parameters from from into to.
+      foreach (var genParam in from.parameters) {
         // This is an O(m*n) check but m and n should be small enough to not matter.
-        if (original.parameters.Any(p => p.name == genParam.name)) {
-          ErrorReport.WithContextObject(original, () => {
-              ErrorReport.ReportException(
-                  new Exception($"Parameter '{genParam.name}' already exists"), 
-                  "Parameter name conflict in animator"
-              );
-          });
+        if (to.parameters.Any(p => p.name == genParam.name)) {
+          ErrorReport.ReportError(lcl, ErrorSeverity.Error,
+              "param_exists",
+              genParam.name, to);
           return;
         }
-        original.AddParameter(genParam);
+        to.AddParameter(genParam);
       }
 
-      // Append each YOTS layer after the original layers.
-      foreach (var genLayer in generated.layers) {
+      // Append each YOTS layer after the to layers.
+      foreach (var genLayer in from.layers) {
         // This isn't strictly an error but if someone already has layers named
         // YOTS_* that's probably not on purpose.
-        if (original.layers.Any(l => l.name == genLayer.name)) {
-          ErrorReport.WithContextObject(original, () => {
-              ErrorReport.ReportException(
-                  new Exception($"Layer '{genLayer.name}' already exists"), 
-                  "Layer name conflict in animator"
-              );
-          });
+        if (to.layers.Any(l => l.name == genLayer.name)) {
+          ErrorReport.ReportError(lcl, ErrorSeverity.Error,
+              "layer_exists",
+              genLayer.name, to);
           return;
         }
         var newLayer = new AnimatorControllerLayer {
@@ -168,7 +155,7 @@ namespace YOTS
           defaultWeight = genLayer.defaultWeight,
           stateMachine = genLayer.stateMachine
         };
-        original.AddLayer(newLayer);
+        to.AddLayer(newLayer);
       }
     }
 

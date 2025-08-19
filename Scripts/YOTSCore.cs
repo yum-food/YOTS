@@ -673,7 +673,7 @@ namespace YOTS
             // Find the toggle with this dependency name
             var depToggle = toggleSpecs.FirstOrDefault(t => t.name == dep);
             if (depToggle == null) {
-              throw new System.Exception($"Toggle '{toggle.name}' has dependency '{dep}' that doesn't exist");
+              throw new ArgumentException($"Toggle '{toggle.name}' has dependency '{dep}' that doesn't exist");
             }
             string depParamName = depToggle.GetParameterName();
             if (!graph.ContainsKey(depParamName))
@@ -731,9 +731,10 @@ namespace YOTS
         
         // Provide detailed error message
         if (cycleNodes.Count == 0) {
-          throw new System.Exception($"Dependency cycle detected but couldn't identify specific nodes. Unprocessed parameters: {string.Join(", ", unprocessedParams)}");
+          // This should never happen.
+          throw new ArgumentException($"Dependency cycle detected but couldn't identify specific nodes. Unprocessed parameters: {string.Join(", ", unprocessedParams)}");
         } else {
-          throw new System.Exception($"Dependency cycle detected in toggle specifications. Nodes involved: {string.Join(", ", cycleNodes)}");
+          throw new ArgumentException($"Dependency cycle detected in toggle specifications. Nodes involved: {string.Join(", ", cycleNodes)}");
         }
       }
 
