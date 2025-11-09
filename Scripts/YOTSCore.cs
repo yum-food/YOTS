@@ -88,6 +88,10 @@ namespace YOTS
     [SerializeField]
     public bool disableMenuEntry = false;
 
+    // If true, it's as if this ToggleSpec doesn't exist.
+    [SerializeField]
+    public bool disabled = false;
+
     // Parent constraint weights to animate
     [SerializeField]
     public List<ParentConstraintWeight> parentConstraintWeights = new List<ParentConstraintWeight>();
@@ -317,6 +321,11 @@ namespace YOTS
       if (config == null) {
         throw new ArgumentException("JSON config is empty or invalid");
       }
+
+      // Remove disabled specs upon ingest so that the usual checks apply.
+      int n_removed = config.toggles.RemoveAll(spec => spec.disabled);
+      Debug.Log($"Removed {n_removed} disabled toggles");
+
       if (config.toggles == null) {
         throw new ArgumentException("No toggleSpecs found in configuration");
       }
