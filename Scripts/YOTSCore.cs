@@ -74,6 +74,16 @@ namespace YOTS
     [SerializeField]
     public float onThreshold = 1.0f;
 
+    // Default value for blendshapes when the toggle is off. Range from 0-100.
+    // Individual blendshapes can override this with their own offValue.
+    [SerializeField]
+    public float offValue = 0.0f;
+
+    // Default value for blendshapes when the toggle is on. Range from 0-100.
+    // Individual blendshapes can override this with their own onValue.
+    [SerializeField]
+    public float onValue = 100.0f;
+
     // Whether the corresponding VRChat parameter is synced.
     [SerializeField]
     public bool synced = true;
@@ -843,23 +853,26 @@ namespace YOTS
           if (string.IsNullOrEmpty(bs.path) && (bs.paths == null || bs.paths.Count == 0)) {
             throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'path' or 'paths'");
           }
-          
+
+          // Use toggle's onValue if blendshape is using the default (100.0f)
+          float effectiveOnValue = (bs.onValue == 100.0f) ? toggle.onValue : bs.onValue;
+
           // Handle single path
           if (!string.IsNullOrEmpty(bs.path)) {
           onAnim.blendShapes.Add(new GeneratedBlendShape{
             path = bs.path,
             blendShape = bs.blendShape,
-            value = bs.onValue
+            value = effectiveOnValue
           });
           }
-          
+
           // Handle multiple paths
           if (bs.paths != null) {
             foreach (var path in bs.paths) {
               onAnim.blendShapes.Add(new GeneratedBlendShape{
                 path = path,
                 blendShape = bs.blendShape,
-                value = bs.onValue
+                value = effectiveOnValue
               });
             }
           }
@@ -903,23 +916,26 @@ namespace YOTS
           if (string.IsNullOrEmpty(bs.path) && (bs.paths == null || bs.paths.Count == 0)) {
             throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'path' or 'paths'");
           }
-          
+
+          // Use toggle's offValue if blendshape is using the default (0.0f)
+          float effectiveOffValue = (bs.offValue == 0.0f) ? toggle.offValue : bs.offValue;
+
           // Handle single path
           if (!string.IsNullOrEmpty(bs.path)) {
             offAnim.blendShapes.Add(new GeneratedBlendShape{
               path = bs.path,
               blendShape = bs.blendShape,
-              value = bs.offValue
+              value = effectiveOffValue
             });
           }
-          
+
           // Handle multiple paths
           if (bs.paths != null) {
             foreach (var path in bs.paths) {
               offAnim.blendShapes.Add(new GeneratedBlendShape{
                 path = path,
                 blendShape = bs.blendShape,
-                value = bs.offValue
+                value = effectiveOffValue
               });
             }
           }
