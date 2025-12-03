@@ -42,6 +42,11 @@ namespace YOTS
     [SerializeField]
     public List<string> meshToggles = new List<string>();
 
+    // The name of meshes to *disable* when the toggle is turned on.
+    // For example, if you want to hide certain meshes when this toggle is active.
+    [SerializeField]
+    public List<string> inverseMeshToggles = new List<string>();
+
     // Blendshapes to animate.
     [SerializeField]
     public List<BlendShapeSpec> blendShapes = new List<BlendShapeSpec>();
@@ -847,6 +852,11 @@ namespace YOTS
           onAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 1.0f });
         }
       }
+      if (toggle.inverseMeshToggles != null) {
+        foreach (var mesh in toggle.inverseMeshToggles) {
+          onAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 0.0f });
+        }
+      }
       if (toggle.blendShapes != null) {
         foreach (var bs in toggle.blendShapes) {
           // Validate that either path or paths is specified
@@ -908,6 +918,11 @@ namespace YOTS
       if (toggle.meshToggles != null) {
         foreach (var mesh in toggle.meshToggles) {
           offAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 0.0f });
+        }
+      }
+      if (toggle.inverseMeshToggles != null) {
+        foreach (var mesh in toggle.inverseMeshToggles) {
+          offAnim.meshToggles.Add(new GeneratedMeshToggle { path = mesh, value = 1.0f });
         }
       }
       if (toggle.blendShapes != null) {
