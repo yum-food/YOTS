@@ -59,11 +59,10 @@ namespace YOTS
     [SerializeField]
     public List<ExternalAnimationSpec> externalAnimations = new List<ExternalAnimationSpec>();
 
-    // Where to put the toggle in the menu. All toggles are placed under
-    // /YOTS. So if you put "Clothes" here, it'll be placed under
-    // /YOTS/Clothes.
+    // Where to put the toggle in the menu. Defaults to the top-level menu.
+    // For example, if you put "Clothes" here, it'll be placed under /Clothes.
     [SerializeField]
-    public string menuPath = "/YOTS";
+    public string menuPath = "/";
 
     // The default value of the toggle. Range from 0-1.
     // For example, if you want a gimmick to start toggled off, set this to

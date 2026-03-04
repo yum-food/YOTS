@@ -104,11 +104,14 @@ namespace YOTS
           descriptor.expressionsMenu = menu;
           descriptor.expressionParameters = parameters;
 
+          // Resolve bare mesh names to full hierarchy paths.
+          var resolvedJson = ResolveMeshNames(config.jsonConfig, ctx.AvatarRootObject.transform);
+
           // Generate the YOTS animator.
           RuntimeAnimatorController generatedAnimator = null;
           try {
             generatedAnimator = YOTSCore.GenerateAnimator(
-                config.jsonConfig,
+                resolvedJson,
                 parameters,
                 menu
             );
@@ -170,6 +173,49 @@ namespace YOTS
     private class YOTSBuildState {
       public string jsonConfig;
       public bool skipGeneration;
+    }
+
+    // Resolve bare mesh names (no '/') in meshToggles/inverseMeshToggles to all
+    // matching hierarchy paths. Names containing '/' are kept as explicit paths.
+    private static string ResolveMeshNames(string jsonConfig, Transform avatarRoot) {
+      var config = JsonUtility.FromJson<AnimatorConfigFile>(jsonConfig);
+      var nameToPathsMap = BuildNameToPathsMap(avatarRoot);
+      foreach (var toggle in config.toggles) {
+        toggle.meshToggles = ExpandMeshNames(toggle.meshToggles, nameToPathsMap);
+        toggle.inverseMeshToggles = ExpandMeshNames(toggle.inverseMeshToggles, nameToPathsMap);
+      }
+      return JsonUtility.ToJson(config);
+    }
+
+    private static List<string> ExpandMeshNames(List<string> names, Dictionary<string, List<string>> nameToPathsMap) {
+      if (names == null) return null;
+      var resolved = new List<string>();
+      foreach (var name in names) {
+        if (name.Contains('/')) {
+          resolved.Add(name);
+        } else if (nameToPathsMap.TryGetValue(name, out var paths)) {
+          resolved.AddRange(paths);
+        } else {
+          resolved.Add(name);
+        }
+      }
+      return resolved;
+    }
+
+    private static Dictionary<string, List<string>> BuildNameToPathsMap(Transform root) {
+      var map = new Dictionary<string, List<string>>();
+      CollectPaths(root, "", map);
+      return map;
+    }
+
+    private static void CollectPaths(Transform current, string currentPath, Dictionary<string, List<string>> map) {
+      foreach (Transform child in current) {
+        string childPath = currentPath == "" ? child.name : currentPath + "/" + child.name;
+        if (!map.ContainsKey(child.name))
+          map[child.name] = new List<string>();
+        map[child.name].Add(childPath);
+        CollectPaths(child, childPath, map);
+      }
     }
 
     private static VRCExpressionsMenu DeepCopyMenu(VRCExpressionsMenu sourceMenu) {
