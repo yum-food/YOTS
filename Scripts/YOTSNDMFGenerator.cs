@@ -40,19 +40,27 @@ namespace YOTS
       // Transforming phase, we can no longer access the YOTSConfig object.
       InPhase(BuildPhase.Resolving)
         .Run("Cache YOTS Config", ctx => {
-          var config = ctx.AvatarRootObject.GetComponentInChildren<YOTSConfig>();
-          if (config == null) {
+          var configs = ctx.AvatarRootObject.GetComponentsInChildren<YOTSConfig>();
+          if (configs.Length == 0) {
             ctx.GetState<YOTSBuildState>().skipGeneration = true;
             Debug.Log("No YOTS config found - skipping.");
             return;
           }
-          if (config.jsonConfig == null) {
-            ctx.GetState<YOTSBuildState>().skipGeneration = true;
-            ErrorReport.ReportError(lcl, ErrorSeverity.Error, "json_missing",
-                ctx.AvatarRootObject);
-            return;
+          var mergedConfig = new AnimatorConfigFile();
+          foreach (var config in configs) {
+            if (config.jsonConfig == null) {
+              ctx.GetState<YOTSBuildState>().skipGeneration = true;
+              ErrorReport.ReportError(lcl, ErrorSeverity.Error, "json_missing",
+                  config.gameObject);
+              return;
+            }
+            var parsed = JsonUtility.FromJson<AnimatorConfigFile>(config.jsonConfig.text);
+            mergedConfig.toggles.AddRange(parsed.toggles);
+            if (parsed.api_version != null) {
+              mergedConfig.api_version = parsed.api_version;
+            }
           }
-          ctx.GetState<YOTSBuildState>().jsonConfig = config.jsonConfig.text;
+          ctx.GetState<YOTSBuildState>().jsonConfig = JsonUtility.ToJson(mergedConfig);
         })
         // Shoutsout anatawa12/AvatarOptimizer
         .BeforePass(RemoveEditorOnlyPass.Instance);
