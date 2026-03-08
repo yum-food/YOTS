@@ -524,3 +524,29 @@ to have one config per modular system. Moreover, users may wish to "bake" out
 the generated animator/menu/params/animations and distribute those with
 prefabs. Some support for that would be useful.
 
+(Partially done - prefabs are done, but baking out is not.)
+
+### 5. Automatic dependency declarations
+
+Artists declaring cross-module dependencies is not practical. They'd have to
+agree to a standard, and there are obvious conventions (inside out, outside in)
+which conflict with each other. Might require linear programming?
+
+### 5.1. User-facing dependency resolution
+
+When two toggles drive the same attribute (shapekey, shader, etc.) without a
+dependency, this should be surfaced to the user, since only they can know
+which one is better.
+
+A visual example would go a long way.
+
+### 6. Artist facing debug tooling
+
+Need GUI ways to handle common debug scenarios. For example, enumerate
+shapekeys driven by multiple toggles.
+
+### 7. Support heterogeneous avatars
+
+VRCFury drives base shapekey; YOTS must also drive it. How does this support
+it?
+

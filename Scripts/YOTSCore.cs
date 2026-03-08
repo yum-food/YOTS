@@ -168,7 +168,7 @@ namespace YOTS
 
     [SerializeField]
     public float onValue = 1.0f;
-    
+
     [SerializeField]
     public string rendererType = "SkinnedMeshRenderer"; // Can be "SkinnedMeshRenderer" or "MeshRenderer"
   }
