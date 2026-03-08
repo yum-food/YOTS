@@ -116,7 +116,7 @@ namespace YOTS
       if (!string.IsNullOrEmpty(parameterName)) {
         return parameterName;
       }
-      
+
       // Otherwise, generate one based on menu structure
       if (disableMenuEntry) {
         return name;
@@ -132,6 +132,8 @@ namespace YOTS
     // For example, "Chest_Hide" or "Boobs+".
     [SerializeField]
     public string blendShape;
+
+    public List<string> blendShapes = new List<string>();
 
     // The path to the mesh renderer to apply the blend shape to.
     // For example, "Body" or "Shirt".
@@ -862,27 +864,42 @@ namespace YOTS
           if (string.IsNullOrEmpty(bs.path) && (bs.paths == null || bs.paths.Count == 0)) {
             throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'path' or 'paths'");
           }
+          // Validate that either blendShape or blendShapes is specified
+          if (string.IsNullOrEmpty(bs.blendShape) && (bs.blendShapes == null || bs.blendShapes.Count == 0)) {
+            throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'blendShape' or 'blendShapes'");
+          }
 
           // Use toggle's onValue if blendshape is using the default (100.0f)
           float effectiveOnValue = (bs.onValue == 100.0f) ? toggle.onValue : bs.onValue;
 
-          // Handle single path
-          if (!string.IsNullOrEmpty(bs.path)) {
-          onAnim.blendShapes.Add(new GeneratedBlendShape{
-            path = bs.path,
-            blendShape = bs.blendShape,
-            value = effectiveOnValue
-          });
+          // Collect all blendshape names
+          List<string> allBlendShapes = new List<string>();
+          if (!string.IsNullOrEmpty(bs.blendShape)) {
+            allBlendShapes.Add(bs.blendShape);
+          }
+          if (bs.blendShapes != null) {
+            allBlendShapes.AddRange(bs.blendShapes);
           }
 
-          // Handle multiple paths
-          if (bs.paths != null) {
-            foreach (var path in bs.paths) {
+          foreach (var blendShapeName in allBlendShapes) {
+            // Handle single path
+            if (!string.IsNullOrEmpty(bs.path)) {
               onAnim.blendShapes.Add(new GeneratedBlendShape{
-                path = path,
-                blendShape = bs.blendShape,
+                path = bs.path,
+                blendShape = blendShapeName,
                 value = effectiveOnValue
               });
+            }
+
+            // Handle multiple paths
+            if (bs.paths != null) {
+              foreach (var path in bs.paths) {
+                onAnim.blendShapes.Add(new GeneratedBlendShape{
+                  path = path,
+                  blendShape = blendShapeName,
+                  value = effectiveOnValue
+                });
+              }
             }
           }
         }
@@ -930,27 +947,42 @@ namespace YOTS
           if (string.IsNullOrEmpty(bs.path) && (bs.paths == null || bs.paths.Count == 0)) {
             throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'path' or 'paths'");
           }
+          // Validate that either blendShape or blendShapes is specified
+          if (string.IsNullOrEmpty(bs.blendShape) && (bs.blendShapes == null || bs.blendShapes.Count == 0)) {
+            throw new ArgumentException($"Blend shape in '{toggle.name}' must specify either 'blendShape' or 'blendShapes'");
+          }
 
           // Use toggle's offValue if blendshape is using the default (0.0f)
           float effectiveOffValue = (bs.offValue == 0.0f) ? toggle.offValue : bs.offValue;
 
-          // Handle single path
-          if (!string.IsNullOrEmpty(bs.path)) {
-            offAnim.blendShapes.Add(new GeneratedBlendShape{
-              path = bs.path,
-              blendShape = bs.blendShape,
-              value = effectiveOffValue
-            });
+          // Collect all blendshape names
+          List<string> allBlendShapes = new List<string>();
+          if (!string.IsNullOrEmpty(bs.blendShape)) {
+            allBlendShapes.Add(bs.blendShape);
+          }
+          if (bs.blendShapes != null) {
+            allBlendShapes.AddRange(bs.blendShapes);
           }
 
-          // Handle multiple paths
-          if (bs.paths != null) {
-            foreach (var path in bs.paths) {
+          foreach (var blendShapeName in allBlendShapes) {
+            // Handle single path
+            if (!string.IsNullOrEmpty(bs.path)) {
               offAnim.blendShapes.Add(new GeneratedBlendShape{
-                path = path,
-                blendShape = bs.blendShape,
+                path = bs.path,
+                blendShape = blendShapeName,
                 value = effectiveOffValue
               });
+            }
+
+            // Handle multiple paths
+            if (bs.paths != null) {
+              foreach (var path in bs.paths) {
+                offAnim.blendShapes.Add(new GeneratedBlendShape{
+                  path = path,
+                  blendShape = blendShapeName,
+                  value = effectiveOffValue
+                });
+              }
             }
           }
         }
