@@ -104,8 +104,8 @@ namespace YOTS
           descriptor.expressionsMenu = menu;
           descriptor.expressionParameters = parameters;
 
-          // Resolve bare mesh names to full hierarchy paths.
-          var resolvedJson = ResolveMeshNames(config.jsonConfig, ctx.AvatarRootObject.transform);
+          // Resolve bare names to full hierarchy paths.
+          var resolvedJson = ResolveNames(config.jsonConfig, ctx.AvatarRootObject.transform);
 
           // Generate the YOTS animator.
           RuntimeAnimatorController generatedAnimator = null;
@@ -175,19 +175,33 @@ namespace YOTS
       public bool skipGeneration;
     }
 
-    // Resolve bare mesh names (no '/') in meshToggles/inverseMeshToggles to all
-    // matching hierarchy paths. Names containing '/' are kept as explicit paths.
-    private static string ResolveMeshNames(string jsonConfig, Transform avatarRoot) {
+    // Resolve bare names (no '/') to full hierarchy paths. Names containing
+    // '/' are kept as explicit paths.
+    private static string ResolveNames(string jsonConfig, Transform avatarRoot) {
       var config = JsonUtility.FromJson<AnimatorConfigFile>(jsonConfig);
       var nameToPathsMap = BuildNameToPathsMap(avatarRoot);
       foreach (var toggle in config.toggles) {
-        toggle.meshToggles = ExpandMeshNames(toggle.meshToggles, nameToPathsMap);
-        toggle.inverseMeshToggles = ExpandMeshNames(toggle.inverseMeshToggles, nameToPathsMap);
+        toggle.meshToggles = ExpandNames(toggle.meshToggles, nameToPathsMap);
+        toggle.inverseMeshToggles = ExpandNames(toggle.inverseMeshToggles, nameToPathsMap);
+        foreach (var bs in toggle.blendShapes) {
+          bs.path = ExpandName(bs.path, nameToPathsMap);
+          bs.paths = ExpandNames(bs.paths, nameToPathsMap);
+        }
+        foreach (var st in toggle.shaderToggles) {
+          st.path = ExpandName(st.path, nameToPathsMap);
+          st.paths = ExpandNames(st.paths, nameToPathsMap);
+        }
       }
       return JsonUtility.ToJson(config);
     }
 
-    private static List<string> ExpandMeshNames(List<string> names, Dictionary<string, List<string>> nameToPathsMap) {
+    private static string ExpandName(string name, Dictionary<string, List<string>> nameToPathsMap) {
+      if (string.IsNullOrEmpty(name) || name.Contains('/')) return name;
+      if (nameToPathsMap.TryGetValue(name, out var paths) && paths.Count == 1) return paths[0];
+      return name;
+    }
+
+    private static List<string> ExpandNames(List<string> names, Dictionary<string, List<string>> nameToPathsMap) {
       if (names == null) return null;
       var resolved = new List<string>();
       foreach (var name in names) {
