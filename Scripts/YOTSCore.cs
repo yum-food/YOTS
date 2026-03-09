@@ -143,6 +143,10 @@ namespace YOTS
     [SerializeField]
     public List<string> paths = new List<string>();
 
+    // Names of object sets to use as paths.
+    [SerializeField]
+    public List<string> sets = new List<string>();
+
     // The value of the blendshape when the toggle is off. Range from 0-100.
     [SerializeField]
     public float offValue = 0.0f;
@@ -162,6 +166,10 @@ namespace YOTS
 
     [SerializeField]
     public List<string> paths = new List<string>();
+
+    // Names of object sets to use as paths.
+    [SerializeField]
+    public List<string> sets = new List<string>();
 
     [SerializeField]
     public float offValue = 0.0f;
@@ -186,7 +194,19 @@ namespace YOTS
   }
 
   [System.Serializable]
+  public class ObjectSet {
+    [SerializeField]
+    public string name;
+
+    [SerializeField]
+    public List<string> objects = new List<string>();
+  }
+
+  [System.Serializable]
   public class AnimatorConfigFile {
+    [SerializeField]
+    public List<ObjectSet> objectSets = new List<ObjectSet>();
+
     [SerializeField]
     public List<ToggleSpec> toggles = new List<ToggleSpec>();
 

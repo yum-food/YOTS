@@ -55,6 +55,7 @@ namespace YOTS
               return;
             }
             var parsed = JsonUtility.FromJson<AnimatorConfigFile>(config.jsonConfig.text);
+            mergedConfig.objectSets.AddRange(parsed.objectSets);
             mergedConfig.toggles.AddRange(parsed.toggles);
             if (parsed.api_version != null) {
               mergedConfig.api_version = parsed.api_version;
@@ -176,23 +177,51 @@ namespace YOTS
     }
 
     // Resolve bare names (no '/') to full hierarchy paths. Names containing
-    // '/' are kept as explicit paths.
+    // '/' are kept as explicit paths. Also expands object set references into paths.
     private static string ResolveNames(string jsonConfig, Transform avatarRoot) {
       var config = JsonUtility.FromJson<AnimatorConfigFile>(jsonConfig);
+
+      // Build set lookup.
+      var setMap = new Dictionary<string, List<string>>();
+      if (config.objectSets != null) {
+        foreach (var set in config.objectSets) {
+          setMap[set.name] = set.objects;
+        }
+      }
+
+      // Expand set references into paths, then resolve bare names.
       var nameToPathsMap = BuildNameToPathsMap(avatarRoot);
       foreach (var toggle in config.toggles) {
         toggle.meshToggles = ExpandNames(toggle.meshToggles, nameToPathsMap);
         toggle.inverseMeshToggles = ExpandNames(toggle.inverseMeshToggles, nameToPathsMap);
         foreach (var bs in toggle.blendShapes) {
+          bs.paths = ExpandSets(bs.paths, bs.sets, setMap, toggle.name, "blendShape");
           bs.path = ExpandName(bs.path, nameToPathsMap);
           bs.paths = ExpandNames(bs.paths, nameToPathsMap);
         }
         foreach (var st in toggle.shaderToggles) {
+          st.paths = ExpandSets(st.paths, st.sets, setMap, toggle.name, "shaderToggle");
           st.path = ExpandName(st.path, nameToPathsMap);
           st.paths = ExpandNames(st.paths, nameToPathsMap);
         }
       }
       return JsonUtility.ToJson(config);
+    }
+
+    // Expand object set references into the paths list.
+    private static List<string> ExpandSets(List<string> paths, List<string> sets,
+        Dictionary<string, List<string>> setMap, string toggleName, string specType) {
+      if (sets == null || sets.Count == 0) return paths;
+      var result = paths != null ? new List<string>(paths) : new List<string>();
+      foreach (var setName in sets) {
+        if (setMap.TryGetValue(setName, out var objects)) {
+          result.AddRange(objects);
+        } else {
+          throw new ArgumentException(
+            $"{specType} in '{toggleName}' references unknown object set '{setName}'");
+        }
+      }
+      return result;
     }
 
     private static string ExpandName(string name, Dictionary<string, List<string>> nameToPathsMap) {
