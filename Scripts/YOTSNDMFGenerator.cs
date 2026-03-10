@@ -254,9 +254,11 @@ namespace YOTS
     private static void CollectPaths(Transform current, string currentPath, Dictionary<string, List<string>> map) {
       foreach (Transform child in current) {
         string childPath = currentPath == "" ? child.name : currentPath + "/" + child.name;
-        if (!map.ContainsKey(child.name))
-          map[child.name] = new List<string>();
-        map[child.name].Add(childPath);
+        if (child.GetComponent<SkinnedMeshRenderer>() != null || child.GetComponent<MeshRenderer>() != null) {
+          if (!map.ContainsKey(child.name))
+            map[child.name] = new List<string>();
+          map[child.name].Add(childPath);
+        }
         CollectPaths(child, childPath, map);
       }
     }
